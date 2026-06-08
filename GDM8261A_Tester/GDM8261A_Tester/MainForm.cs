@@ -122,7 +122,7 @@ namespace GDM8261A_Tester
             gbConn.Controls.Add(btnConnect);
 
             btnDisconnect = new Button { Text = "中斷連線", Location = new Point(830, 20), Size = new Size(120, 30) };
-            btnDisconnect.Click += (s, e) => Disconnect();
+            btnDisconnect.Click += async (s, e) => await DisconnectAsync();
             gbConn.Controls.Add(btnDisconnect);
 
             lblStatus = new Label { Text = "● 未連線", Location = new Point(700, 58), AutoSize = true, ForeColor = Color.Firebrick };
@@ -328,20 +328,33 @@ namespace GDM8261A_Tester
             }
         }
 
-        private void Disconnect()
+        private async Task DisconnectAsync()
         {
             StopPolling();
 
-            try
+            // 先把欄位清掉，避免之後的 I/O 取用到正在釋放的傳輸層
+            IGdmTransport transport = _transport;
+            _transport = null;
+
+            if (transport != null)
             {
-                _transport?.Dispose();
-            }
-            catch
-            {
-                // 關閉時例外可忽略
+                // 取得 I/O 鎖，等待進行中的讀寫結束後才 Dispose，
+                // 避免在 SerialPort.ReadLine 進行中關閉而造成 hang 或例外。
+                await _ioLock.WaitAsync();
+                try
+                {
+                    transport.Dispose();
+                }
+                catch
+                {
+                    // 關閉時例外可忽略
+                }
+                finally
+                {
+                    _ioLock.Release();
+                }
             }
 
-            _transport = null;
             lblIdn.Text = "";
 
             UpdateConnectionUi(false);
@@ -589,7 +602,15 @@ namespace GDM8261A_Tester
 
             try
             {
-                await Task.Run(() => _transport.WriteLine(cmd));
+                // 在鎖內抓取穩定參考，避免背景執行緒在斷線瞬間踩到 null
+                IGdmTransport transport = _transport;
+                if (transport == null)
+                {
+                    Log("ERR", "尚未連線");
+                    return false;
+                }
+
+                await Task.Run(() => transport.WriteLine(cmd));
                 Log("→", cmd);
                 return true;
             }
@@ -615,10 +636,18 @@ namespace GDM8261A_Tester
 
             try
             {
+                // 在鎖內抓取穩定參考，避免背景執行緒在斷線瞬間踩到 null
+                IGdmTransport transport = _transport;
+                if (transport == null)
+                {
+                    Log("ERR", "尚未連線");
+                    return null;
+                }
+
                 string resp = await Task.Run(() =>
                 {
-                    _transport.WriteLine(cmd);
-                    return _transport.ReadLine();
+                    transport.WriteLine(cmd);
+                    return transport.ReadLine();
                 });
 
                 if (logTraffic)
@@ -695,13 +724,30 @@ namespace GDM8261A_Tester
         {
             StopPolling();
 
+            IGdmTransport transport = _transport;
+            _transport = null;
+
+            if (transport == null)
+            {
+                return;
+            }
+
+            // 程式關閉，盡量等進行中的 I/O 結束再釋放（最多 2 秒，逾時則強制釋放）
+            bool acquired = _ioLock.Wait(2000);
             try
             {
-                _transport?.Dispose();
+                transport.Dispose();
             }
             catch
             {
                 // 關閉時例外可忽略
+            }
+            finally
+            {
+                if (acquired)
+                {
+                    _ioLock.Release();
+                }
             }
         }
     }
