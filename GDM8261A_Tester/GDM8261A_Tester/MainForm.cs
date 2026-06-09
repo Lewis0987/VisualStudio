@@ -94,6 +94,7 @@ namespace GDM8261A_Tester
             rbSerial = new RadioButton { Text = "USB / RS-232", Location = new Point(15, 24), AutoSize = true, Checked = true };
             rbLan = new RadioButton { Text = "LAN (TCP)", Location = new Point(15, 56), AutoSize = true };
             rbSerial.CheckedChanged += (s, e) => UpdateInterfaceUi();
+            rbLan.CheckedChanged += (s, e) => UpdateInterfaceUi();
             gbConn.Controls.Add(rbSerial);
             gbConn.Controls.Add(rbLan);
 
@@ -295,9 +296,31 @@ namespace GDM8261A_Tester
                 }
                 else
                 {
-                    _transport = new TcpTransport(
-                        txtIp.Text.Trim(),
-                        int.Parse(txtTcpPort.Text.Trim()));
+                    string ip = txtIp.Text.Trim();
+                    if (ip.Length == 0)
+                    {
+                        MessageBox.Show(
+                            "請輸入儀器 IP 位址。",
+                            "IP 未填",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+
+                        return;
+                    }
+
+                    if (!int.TryParse(txtTcpPort.Text.Trim(), out int tcpPort) ||
+                        tcpPort < 1 || tcpPort > 65535)
+                    {
+                        MessageBox.Show(
+                            "TCP Port 必須是 1~65535 的整數。",
+                            "Port 格式錯誤",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+
+                        return;
+                    }
+
+                    _transport = new TcpTransport(ip, tcpPort);
                 }
 
                 btnConnect.Enabled = false;
@@ -356,6 +379,7 @@ namespace GDM8261A_Tester
             }
 
             lblIdn.Text = "";
+            lblValue.Text = "-------";
 
             UpdateConnectionUi(false);
             Log("SYS", "已中斷連線");
@@ -537,6 +561,12 @@ namespace GDM8261A_Tester
                 {
                     string resp = await QueryAsync("READ?", logTraffic: false);
 
+                    // 讀取期間若已要求停止，丟棄這筆過期結果，避免停止後數值再跳動
+                    if (token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
                     if (resp == null)
                     {
                         break;
@@ -690,7 +720,15 @@ namespace GDM8261A_Tester
 
             if (txtLog.Lines.Length > 2000)
             {
-                txtLog.Clear();
+                // 只移除最舊的前半段，保留近期紀錄與其顏色，不整個清空
+                int removeCount = txtLog.Lines.Length / 2;
+                int charIndex = txtLog.GetFirstCharIndexFromLine(removeCount);
+
+                if (charIndex > 0)
+                {
+                    txtLog.Select(0, charIndex);
+                    txtLog.SelectedText = "";
+                }
             }
 
             Color color;
@@ -746,7 +784,9 @@ namespace GDM8261A_Tester
             {
                 if (acquired)
                 {
+                    // 確定已無進行中的 I/O 才釋放並 Dispose，避免背景續行踩到已釋放的鎖
                     _ioLock.Release();
+                    _ioLock.Dispose();
                 }
             }
         }
