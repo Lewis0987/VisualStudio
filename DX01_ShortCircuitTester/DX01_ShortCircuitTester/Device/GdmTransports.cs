@@ -179,10 +179,14 @@ namespace DX01_ShortCircuitTester.Device
     /// </summary>
     public static class GdmConnectionConfig
     {
-        public static GdmConnectionMode Mode = GdmConnectionMode.Serial;
+        // V1.1 預設改為 LAN(TCP)
+        public static GdmConnectionMode Mode = GdmConnectionMode.Lan;
         public static int Baud = 115200;
         public static string Ip = "192.168.100.100";
         public static int TcpPort = 23;
+
+        /// <summary>條碼/序號驗證規則（Regex）；空字串 = 不檢查。</summary>
+        public static string BarcodeRegex = "";
 
         public static void Load()
         {
@@ -207,6 +211,10 @@ namespace DX01_ShortCircuitTester.Device
                     Ip = ip;
 
                 TcpPort = (int)ReadNum(json, "gdm_tcpPort", TcpPort);
+
+                string regex = ReadStr(json, "barcodeRegex");
+                if (regex != null)
+                    BarcodeRegex = regex;
             }
             catch
             {

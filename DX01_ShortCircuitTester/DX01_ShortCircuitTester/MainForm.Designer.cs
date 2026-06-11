@@ -24,8 +24,7 @@ namespace DX01_ShortCircuitTester
             this.panelTop = new System.Windows.Forms.TableLayoutPanel();
             this.lblBarcodeCaption = new System.Windows.Forms.Label();
             this.txtBarcode = new System.Windows.Forms.TextBox();
-            this.btnStart = new System.Windows.Forms.Button();
-            this.btnStop = new System.Windows.Forms.Button();
+            this.lblBarcodeMsg = new System.Windows.Forms.Label();
             this.panelStatus = new System.Windows.Forms.TableLayoutPanel();
             this.panelStatusLeft = new System.Windows.Forms.TableLayoutPanel();
             this.capStep = new System.Windows.Forms.Label();
@@ -138,15 +137,13 @@ namespace DX01_ShortCircuitTester
             //
             // panelTop
             //
-            this.panelTop.ColumnCount = 4;
+            this.panelTop.ColumnCount = 3;
             this.panelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.AutoSize));
             this.panelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.panelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 170F));
-            this.panelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 170F));
+            this.panelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 260F));
             this.panelTop.Controls.Add(this.lblBarcodeCaption, 0, 0);
             this.panelTop.Controls.Add(this.txtBarcode, 1, 0);
-            this.panelTop.Controls.Add(this.btnStart, 2, 0);
-            this.panelTop.Controls.Add(this.btnStop, 3, 0);
+            this.panelTop.Controls.Add(this.lblBarcodeMsg, 2, 0);
             this.panelTop.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelTop.Location = new System.Drawing.Point(11, 11);
             this.panelTop.Name = "panelTop";
@@ -175,37 +172,15 @@ namespace DX01_ShortCircuitTester
             this.txtBarcode.Size = new System.Drawing.Size(491, 36);
             this.txtBarcode.TabIndex = 1;
             //
-            // btnStart
+            // lblBarcodeMsg
             //
-            this.btnStart.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(76)))), ((int)(((byte)(175)))), ((int)(((byte)(80)))));
-            this.btnStart.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnStart.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnStart.Font = new System.Drawing.Font("Microsoft JhengHei UI", 14F, System.Drawing.FontStyle.Bold);
-            this.btnStart.ForeColor = System.Drawing.Color.White;
-            this.btnStart.Location = new System.Drawing.Point(606, 3);
-            this.btnStart.Margin = new System.Windows.Forms.Padding(6, 3, 3, 3);
-            this.btnStart.Name = "btnStart";
-            this.btnStart.Size = new System.Drawing.Size(161, 66);
-            this.btnStart.TabIndex = 2;
-            this.btnStart.Text = "開始測試";
-            this.btnStart.UseVisualStyleBackColor = false;
-            this.btnStart.Click += new System.EventHandler(this.btnStart_Click);
-            //
-            // btnStop
-            //
-            this.btnStop.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(229)))), ((int)(((byte)(57)))), ((int)(((byte)(53)))));
-            this.btnStop.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnStop.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnStop.Font = new System.Drawing.Font("Microsoft JhengHei UI", 14F, System.Drawing.FontStyle.Bold);
-            this.btnStop.ForeColor = System.Drawing.Color.White;
-            this.btnStop.Location = new System.Drawing.Point(776, 3);
-            this.btnStop.Margin = new System.Windows.Forms.Padding(6, 3, 3, 3);
-            this.btnStop.Name = "btnStop";
-            this.btnStop.Size = new System.Drawing.Size(175, 66);
-            this.btnStop.TabIndex = 3;
-            this.btnStop.Text = "停止測試";
-            this.btnStop.UseVisualStyleBackColor = false;
-            this.btnStop.Click += new System.EventHandler(this.btnStop_Click);
+            this.lblBarcodeMsg.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.lblBarcodeMsg.AutoSize = true;
+            this.lblBarcodeMsg.Font = new System.Drawing.Font("Microsoft JhengHei UI", 13F, System.Drawing.FontStyle.Bold);
+            this.lblBarcodeMsg.Location = new System.Drawing.Point(700, 24);
+            this.lblBarcodeMsg.Name = "lblBarcodeMsg";
+            this.lblBarcodeMsg.Size = new System.Drawing.Size(0, 24);
+            this.lblBarcodeMsg.TabIndex = 2;
             //
             // panelStatus
             //
@@ -328,7 +303,9 @@ namespace DX01_ShortCircuitTester
             //
             this.dgvResults.AllowUserToAddRows = false;
             this.dgvResults.AllowUserToDeleteRows = false;
-            this.dgvResults.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvResults.AllowUserToResizeColumns = true;
+            this.dgvResults.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.None;
+            this.dgvResults.ScrollBars = System.Windows.Forms.ScrollBars.Both;
             this.dgvResults.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             this.dgvResults.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
                 this.colStep,
@@ -352,52 +329,52 @@ namespace DX01_ShortCircuitTester
             //
             // colStep
             //
-            this.colStep.FillWeight = 55F;
             this.colStep.HeaderText = "步驟";
             this.colStep.Name = "colStep";
             this.colStep.ReadOnly = true;
+            this.colStep.Width = 60;
             //
             // colName
             //
-            this.colName.FillWeight = 200F;
             this.colName.HeaderText = "名稱";
             this.colName.Name = "colName";
             this.colName.ReadOnly = true;
+            this.colName.Width = 180;
             //
             // colRelay
             //
-            this.colRelay.FillWeight = 65F;
             this.colRelay.HeaderText = "Relay";
             this.colRelay.Name = "colRelay";
             this.colRelay.ReadOnly = true;
+            this.colRelay.Width = 80;
             //
             // colMode
             //
-            this.colMode.FillWeight = 80F;
             this.colMode.HeaderText = "模式";
             this.colMode.Name = "colMode";
             this.colMode.ReadOnly = true;
+            this.colMode.Width = 120;
             //
             // colValue
             //
-            this.colValue.FillWeight = 110F;
             this.colValue.HeaderText = "量測值";
             this.colValue.Name = "colValue";
             this.colValue.ReadOnly = true;
+            this.colValue.Width = 140;
             //
             // colLimit
             //
-            this.colLimit.FillWeight = 120F;
             this.colLimit.HeaderText = "判定條件";
             this.colLimit.Name = "colLimit";
             this.colLimit.ReadOnly = true;
+            this.colLimit.Width = 180;
             //
             // colResult
             //
-            this.colResult.FillWeight = 70F;
             this.colResult.HeaderText = "結果";
             this.colResult.Name = "colResult";
             this.colResult.ReadOnly = true;
+            this.colResult.Width = 100;
             //
             // panelFooter
             //
@@ -718,8 +695,7 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.TableLayoutPanel panelTop;
         private System.Windows.Forms.Label lblBarcodeCaption;
         private System.Windows.Forms.TextBox txtBarcode;
-        private System.Windows.Forms.Button btnStart;
-        private System.Windows.Forms.Button btnStop;
+        private System.Windows.Forms.Label lblBarcodeMsg;
         private System.Windows.Forms.TableLayoutPanel panelStatus;
         private System.Windows.Forms.TableLayoutPanel panelStatusLeft;
         private System.Windows.Forms.Label capStep;

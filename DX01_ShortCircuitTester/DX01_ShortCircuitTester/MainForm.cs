@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO.Ports;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using DX01_ShortCircuitTester.Device;
@@ -29,6 +30,8 @@ namespace DX01_ShortCircuitTester
         private static readonly Color OkGreen = Color.FromArgb(46, 160, 67);
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
 
+        private System.Windows.Forms.Timer _okMsgTimer;
+
         public MainForm()
         {
             InitializeComponent();
@@ -48,6 +51,9 @@ namespace DX01_ShortCircuitTester
             SetResult("待測", Color.DimGray, Color.Gainsboro);
 
             txtBarcode.KeyDown += TxtBarcode_KeyDown;
+
+            _okMsgTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _okMsgTimer.Tick += (s, ev) => { _okMsgTimer.Stop(); lblBarcodeMsg.Text = ""; };
 
             // GDM 連線方式（Serial / LAN）：載入設定預設值並切換顯示
             GdmConnectionConfig.Load();
@@ -283,13 +289,6 @@ namespace DX01_ShortCircuitTester
             if (lblDevInfoRelay != null)
                 lblDevInfoRelay.Text = "Relay VID/PID: 16C0:05DF  " + (r ? "(已連線)" : "(未連線)");
 
-            UpdateStartEnabled();
-        }
-
-        /// <summary>設備未連線時停用「開始測試」。</summary>
-        private void UpdateStartEnabled()
-        {
-            btnStart.Enabled = !_running && _meter.IsConnected && _relay.IsConnected;
         }
 
         #endregion
@@ -298,23 +297,56 @@ namespace DX01_ShortCircuitTester
 
         private void TxtBarcode_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true;
-                if (!_running)
-                    StartTest();
-            }
-        }
+            if (e.KeyCode != Keys.Enter)
+                return;
 
-        private void btnStart_Click(object sender, EventArgs e)
-        {
+            e.SuppressKeyPress = true; // 避免 Enter 嗶聲
+            if (_running)
+                return;
+
+            string sn = txtBarcode.Text.Trim();
+
+            // 條碼/序號規則檢查（Config: barcodeRegex，空字串=不檢查）
+            string pattern = GdmConnectionConfig.BarcodeRegex;
+            if (!string.IsNullOrEmpty(pattern))
+            {
+                bool match;
+                try { match = Regex.IsMatch(sn, pattern); }
+                catch { match = true; } // 規則本身有誤時不阻擋
+
+                if (!match)
+                {
+                    ShowBarcodeMsg("✕ 條碼格式錯誤", Color.Firebrick, false);
+                    MessageBox.Show(this,
+                        "條碼/序號不符合規則。\n\n規則: " + pattern + "\n輸入: " + (sn.Length == 0 ? "(空白)" : sn),
+                        "條碼格式錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtBarcode.SelectAll();
+                    txtBarcode.Focus();
+                    return; // 不執行測試
+                }
+            }
+            else if (sn.Length == 0)
+            {
+                ShowBarcodeMsg("✕ 請輸入序號", Color.Firebrick, false);
+                return;
+            }
+
+            // 符合 → 顯示 OK（1 秒後消失）並自動進入測試流程
+            ShowBarcodeMsg("✓ OK", OkGreen, true);
             StartTest();
         }
 
-        private void btnStop_Click(object sender, EventArgs e)
+        /// <summary>條碼欄位旁顯示訊息；autoHide=true 時 1 秒後自動清除。</summary>
+        private void ShowBarcodeMsg(string text, Color color, bool autoHide)
         {
-            if (_cts != null)
-                _cts.Cancel();
+            lblBarcodeMsg.Text = text;
+            lblBarcodeMsg.ForeColor = color;
+            if (_okMsgTimer != null)
+            {
+                _okMsgTimer.Stop();
+                if (autoHide)
+                    _okMsgTimer.Start();
+            }
         }
 
         private async void StartTest()
@@ -423,6 +455,8 @@ namespace DX01_ShortCircuitTester
         {
             lblCurrentStep.Text = "Step " + e.StepNumber + " — " + e.Description;
             lblInfo.Text = "執行中… Step " + e.StepNumber;
+            if (_debugLog != null)
+                _debugLog.Write(LogKind.Info, "Step " + e.StepNumber + " — " + e.Description);
         }
 
         private void Flow_RelayChanged(object sender, string code)
@@ -448,12 +482,20 @@ namespace DX01_ShortCircuitTester
                 e.Judgement);
 
             var row = dgvResults.Rows[index];
-            row.DefaultCellStyle.BackColor = e.Pass
-                ? Color.FromArgb(232, 245, 233)
-                : Color.FromArgb(255, 235, 238);
-            row.DefaultCellStyle.ForeColor = e.Pass
-                ? Color.FromArgb(27, 94, 32)
-                : Color.FromArgb(183, 28, 28);
+            if (e.IsInfo)
+            {
+                row.DefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
+                row.DefaultCellStyle.ForeColor = Color.DimGray;
+            }
+            else
+            {
+                row.DefaultCellStyle.BackColor = e.Pass
+                    ? Color.FromArgb(232, 245, 233)
+                    : Color.FromArgb(255, 235, 238);
+                row.DefaultCellStyle.ForeColor = e.Pass
+                    ? Color.FromArgb(27, 94, 32)
+                    : Color.FromArgb(183, 28, 28);
+            }
 
             dgvResults.FirstDisplayedScrollingRowIndex = index;
         }
@@ -475,10 +517,8 @@ namespace DX01_ShortCircuitTester
         private void SetRunningState(bool running)
         {
             _running = running;
-            btnStop.Enabled = running;
             txtBarcode.Enabled = !running;
             tabDevice.Enabled = !running; // 測試中不可改設備設定
-            UpdateStartEnabled();         // 設備未連線或測試中 → 停用開始測試
         }
 
         private void UpdateInfo(TestResult result = null, string logFile = null)

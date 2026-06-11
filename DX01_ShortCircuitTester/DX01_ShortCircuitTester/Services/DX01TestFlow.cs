@@ -36,16 +36,13 @@ namespace DX01_ShortCircuitTester.Services
     /// <summary>
     /// DX01 外殼短路測試流程（共 10 步驟）。
     /// 與 UI 解耦：透過事件回報進度，呼叫端（MainForm）只負責顯示。
-    /// 各步驟判定值由 Config\DX01Config.json 載入（找不到則用內建預設值）。
+    /// 判定值與每步驟等待時間皆由 Config\DX01Config.json 載入（找不到則用內建預設）。
     /// </summary>
     public sealed class DX01TestFlow
     {
         private readonly IRelayController _relay;
         private readonly IGdm8261AController _meter;
         private readonly DX01Limits _limits;
-
-        /// <summary>每個步驟模擬耗時（ms）；由設定檔載入，方便觀察流程與允許中途停止。</summary>
-        public int StepDelayMs { get; set; }
 
         public event EventHandler<StepStartedEventArgs> StepStarted;
         public event EventHandler<string> RelayChanged;
@@ -58,7 +55,6 @@ namespace DX01_ShortCircuitTester.Services
             _relay = relay;
             _meter = meter;
             _limits = DX01Limits.Load();
-            StepDelayMs = _limits.StepDelayMs;
         }
 
         /// <summary>
@@ -83,11 +79,13 @@ namespace DX01_ShortCircuitTester.Services
                 SwitchRelay("00");
                 _meter.SetMode(MeasurementMode.Resistance);
                 _meter.SetRangeAuto();
-                await Delay(token);
+                await Delay(_limits.WaitMs(1), token);
+                AddInfoStep(result, 1, "初始化電表", "00", "電阻");
 
                 // Step 2 掃描 Label，記錄序號（序號已由 UI 傳入）
                 RaiseStep(2, "掃描 Label，序號 = " + serialNumber);
-                await Delay(token);
+                await Delay(_limits.WaitMs(2), token);
+                AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-");
 
                 // Step 3 外殼對機殼導通：Relay=00，R < 10Ω
                 if (!await MeasureStep(result, 3, "外殼對機殼導通", "00",
@@ -108,9 +106,9 @@ namespace DX01_ShortCircuitTester.Services
                 RaiseStep(6, "切換電壓量測 (DC Voltage, Range=100V)");
                 _meter.SetMode(MeasurementMode.DcVoltage);
                 _meter.SetRange("100");
-                await Delay(token);
+                await Delay(_limits.WaitMs(6), token);
 
-                // Step 7 電壓總值：Relay=11，V > 45V
+                // Step 7 電壓總值：Relay=11，V > 45V（等待時間較長，待電壓穩定後再讀）
                 if (!await MeasureStep(result, 7, "電壓總值", "11",
                         MeasurementMode.DcVoltage, "V", _limits.Step7TotalVoltageMin, null, token))
                     return Finish(result);
@@ -140,7 +138,24 @@ namespace DX01_ShortCircuitTester.Services
             return Finish(result);
         }
 
-        /// <summary>執行一個量測步驟並判定。回傳是否通過。</summary>
+        /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。</summary>
+        private void AddInfoStep(TestResult result, int step, string name, string relayCode, string mode)
+        {
+            var stepResult = new TestStepResult
+            {
+                StepNumber = step,
+                StepName = name,
+                RelayCode = relayCode,
+                Mode = mode,
+                IsInfo = true,
+                Pass = true,
+                Time = DateTime.Now
+            };
+            result.Steps.Add(stepResult);
+            StepCompleted?.Invoke(this, stepResult);
+        }
+
+        /// <summary>執行一個量測步驟並判定。回傳是否通過。等待時間依步驟由 Config 控制。</summary>
         private async Task<bool> MeasureStep(
             TestResult result, int step, string name, string relayCode,
             MeasurementMode mode, string unit, double? low, double? high,
@@ -150,7 +165,7 @@ namespace DX01_ShortCircuitTester.Services
 
             SwitchRelay(relayCode);
             _meter.SetMode(mode);
-            await Delay(token);
+            await Delay(_limits.WaitMs(step), token);
 
             double value = _meter.Read();
             Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
@@ -205,10 +220,10 @@ namespace DX01_ShortCircuitTester.Services
             StatusChanged?.Invoke(this, status);
         }
 
-        private async Task Delay(CancellationToken token)
+        private async Task Delay(int ms, CancellationToken token)
         {
-            if (StepDelayMs > 0)
-                await Task.Delay(StepDelayMs, token);
+            if (ms > 0)
+                await Task.Delay(ms, token);
             else
                 token.ThrowIfCancellationRequested();
         }
@@ -221,7 +236,7 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// 各步驟判定值。預設值即原本寫死的條件；Load() 會嘗試從 Config\DX01Config.json 覆寫。
+        /// 各步驟判定值與等待時間。預設值即原本寫死的條件；Load() 會嘗試從 Config\DX01Config.json 覆寫。
         /// （net48 無內建 JSON 函式庫且不變更 csproj，故以極簡解析讀取數值欄位；
         ///  任何讀取/解析失敗都回退預設值，不影響測試流程。）
         /// </summary>
@@ -235,7 +250,15 @@ namespace DX01_ShortCircuitTester.Services
             public double Step8PPlusMinusMax = 51.0;          // P+/P- 電壓：~ 51V
             public double Step9PPlusToCaseMax = 1.0;          // P+ 對外殼電壓：V < 1V
             public double Step10PMinusToCaseMax = 1.0;        // P- 對外殼電壓：V < 1V
-            public int StepDelayMs = 350;
+
+            public int StepDelayMs = 350;                     // 預設等待（未指定步驟時）
+            // 各步驟等待時間（index 1..10）；Step7 預設較長（電壓穩定）
+            public int[] StepWaitMs = { 0, 350, 350, 350, 350, 350, 350, 10000, 350, 350, 350 };
+
+            public int WaitMs(int step)
+            {
+                return (step >= 1 && step <= 10) ? StepWaitMs[step] : StepDelayMs;
+            }
 
             public static DX01Limits Load()
             {
@@ -247,6 +270,7 @@ namespace DX01_ShortCircuitTester.Services
                 try
                 {
                     string json = File.ReadAllText(path);
+
                     cfg.Step3CaseToChassisMax = ReadNum(json, "step3_caseToChassis_max", cfg.Step3CaseToChassisMax);
                     cfg.Step4PPlusInsulationMin = ReadNum(json, "step4_pPlusInsulation_min", cfg.Step4PPlusInsulationMin);
                     cfg.Step5PMinusInsulationMin = ReadNum(json, "step5_pMinusInsulation_min", cfg.Step5PMinusInsulationMin);
@@ -255,18 +279,19 @@ namespace DX01_ShortCircuitTester.Services
                     cfg.Step8PPlusMinusMax = ReadNum(json, "step8_pPlusMinusVoltage_max", cfg.Step8PPlusMinusMax);
                     cfg.Step9PPlusToCaseMax = ReadNum(json, "step9_pPlusToCaseVoltage_max", cfg.Step9PPlusToCaseMax);
                     cfg.Step10PMinusToCaseMax = ReadNum(json, "step10_pMinusToCaseVoltage_max", cfg.Step10PMinusToCaseMax);
+
                     cfg.StepDelayMs = (int)ReadNum(json, "stepDelayMs", cfg.StepDelayMs);
+                    for (int s = 1; s <= 10; s++)
+                        cfg.StepWaitMs[s] = (int)ReadNum(json, "Step" + s + "WaitMs", cfg.StepWaitMs[s]);
                 }
                 catch
                 {
-                    // 解析失敗 → 全部回退預設值
                     return new DX01Limits();
                 }
 
                 return cfg;
             }
 
-            /// <summary>從執行檔位置向上尋找 Config\DX01Config.json。</summary>
             private static string FindConfigFile()
             {
                 try

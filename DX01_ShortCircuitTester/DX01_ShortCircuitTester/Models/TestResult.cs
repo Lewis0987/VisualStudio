@@ -19,10 +19,13 @@ namespace DX01_ShortCircuitTester.Models
         public bool Pass { get; set; }
         public DateTime Time { get; set; }
 
+        /// <summary>資訊步驟（如 Step1 初始化、Step2 掃描），無量測值 / 無判定條件。</summary>
+        public bool IsInfo { get; set; }
+
         /// <summary>量測值的易讀字串（自動換算 kΩ / MΩ）。</summary>
         public string ValueText
         {
-            get { return FormatValue(Value, Unit); }
+            get { return IsInfo ? "—" : FormatValue(Value, Unit); }
         }
 
         /// <summary>判定條件文字，例如 "&lt; 10 Ω"、"48 ~ 51 V"。</summary>
@@ -30,6 +33,8 @@ namespace DX01_ShortCircuitTester.Models
         {
             get
             {
+                if (IsInfo)
+                    return "—";
                 if (LowLimit.HasValue && HighLimit.HasValue)
                     return FormatValue(LowLimit.Value, Unit) + " ~ " + FormatValue(HighLimit.Value, Unit);
                 if (HighLimit.HasValue)
@@ -42,7 +47,7 @@ namespace DX01_ShortCircuitTester.Models
 
         public string Judgement
         {
-            get { return Pass ? "PASS" : "NG"; }
+            get { return IsInfo ? "—" : (Pass ? "PASS" : "NG"); }
         }
 
         public static string FormatValue(double value, string unit)

@@ -43,8 +43,8 @@ namespace DX01_ShortCircuitTester.Services
                 sb.Append(Csv(step.StepName)).Append(',');
                 sb.Append(Csv(step.RelayCode)).Append(',');
                 sb.Append(Csv(step.Mode)).Append(',');
-                sb.Append(Csv(FormatNumber(step.Value))).Append(',');
-                sb.Append(Csv(step.Unit)).Append(',');
+                sb.Append(Csv(step.IsInfo ? "" : FormatNumber(step.Value))).Append(',');
+                sb.Append(Csv(step.IsInfo ? "" : step.Unit)).Append(',');
                 sb.Append(Csv(step.LowLimit.HasValue ? FormatNumber(step.LowLimit.Value) : "")).Append(',');
                 sb.Append(Csv(step.HighLimit.HasValue ? FormatNumber(step.HighLimit.Value) : "")).Append(',');
                 sb.Append(Csv(step.Judgement));
