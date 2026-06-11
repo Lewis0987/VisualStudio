@@ -1,0 +1,12 @@
+{
+  "description": "DX01 外殼短路流程判定值。修改後重新啟動程式即生效；找不到此檔或欄位時，使用程式內建預設值。部署時請將本檔放在執行檔旁的 Config 資料夾。",
+  "step3_caseToChassis_max": 10,
+  "step4_pPlusInsulation_min": 1000000,
+  "step5_pMinusInsulation_min": 1000000,
+  "step7_totalVoltage_min": 45,
+  "step8_pPlusMinusVoltage_min": 48,
+  "step8_pPlusMinusVoltage_max": 51,
+  "step9_pPlusToCaseVoltage_max": 1,
+  "step10_pMinusToCaseVoltage_max": 1,
+  "stepDelayMs": 350
+}
