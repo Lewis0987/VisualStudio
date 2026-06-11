@@ -49,6 +49,20 @@ namespace DX01_ShortCircuitTester
 
             txtBarcode.KeyDown += TxtBarcode_KeyDown;
 
+            // GDM 連線方式（Serial / LAN）：載入設定預設值並切換顯示
+            GdmConnectionConfig.Load();
+            rbSerial.CheckedChanged += (s, ev) => UpdateGdmInterfaceUi();
+            rbLan.CheckedChanged += (s, ev) => UpdateGdmInterfaceUi();
+            txtGdmIp.Text = GdmConnectionConfig.Ip;
+            txtGdmPort.Text = GdmConnectionConfig.TcpPort.ToString();
+            if (cbGdmBaud.Items.Contains(GdmConnectionConfig.Baud.ToString()))
+                cbGdmBaud.SelectedItem = GdmConnectionConfig.Baud.ToString();
+            if (GdmConnectionConfig.Mode == GdmConnectionMode.Lan)
+                rbLan.Checked = true;
+            else
+                rbSerial.Checked = true;
+            UpdateGdmInterfaceUi();
+
             // 啟動時初始化設備並嘗試連線（失敗則顯示未連線，不跳錯）
             TryAutoConnect();
             UpdateConnStatus();
@@ -77,15 +91,49 @@ namespace DX01_ShortCircuitTester
         {
             try { _relay.Connect(); } catch { /* 未接 Relay，顯示未連線即可 */ }
 
-            if (cbGdmPort.SelectedItem != null)
+            // 僅在 Serial 且已選 COM 時自動連線；LAN 不自動連（避免 TCP 逾時阻塞啟動）
+            if (!rbLan.Checked && cbGdmPort.SelectedItem != null)
             {
                 try
                 {
-                    _meter.PortName = cbGdmPort.SelectedItem.ToString();
-                    _meter.BaudRate = GetSelectedBaud();
+                    ApplyGdmConnectionSettings();
                     _meter.Connect();
                 }
                 catch { /* COM 不對或未接，維持未連線 */ }
+            }
+        }
+
+        /// <summary>依目前選擇的連線方式，顯示 Serial 或 LAN 欄位。</summary>
+        private void UpdateGdmInterfaceUi()
+        {
+            bool lan = rbLan.Checked;
+            lblGdmPortCap.Visible = !lan;
+            cbGdmPort.Visible = !lan;
+            btnGdmRefresh.Visible = !lan;
+            lblGdmBaudCap.Visible = !lan;
+            cbGdmBaud.Visible = !lan;
+
+            lblGdmIpCap.Visible = lan;
+            txtGdmIp.Visible = lan;
+            lblGdmTcpPortCap.Visible = lan;
+            txtGdmPort.Visible = lan;
+        }
+
+        /// <summary>把 UI 的連線參數套到電表控制器（Serial / LAN）。</summary>
+        private void ApplyGdmConnectionSettings()
+        {
+            if (rbLan.Checked)
+            {
+                _meter.UseLan = true;
+                _meter.Ip = txtGdmIp.Text.Trim();
+                int port;
+                _meter.TcpPort = int.TryParse(txtGdmPort.Text.Trim(), out port) ? port : 23;
+            }
+            else
+            {
+                _meter.UseLan = false;
+                _meter.PortName = cbGdmPort.SelectedItem != null ? cbGdmPort.SelectedItem.ToString() : null;
+                _meter.BaudRate = GetSelectedBaud();
             }
         }
 
@@ -119,17 +167,35 @@ namespace DX01_ShortCircuitTester
 
         private void btnGdmConnect_Click(object sender, EventArgs e)
         {
-            if (cbGdmPort.SelectedItem == null)
+            if (rbLan.Checked)
             {
-                MessageBox.Show(this, "請先選擇 COM Port（按重新整理偵測）。", "尚未選擇 COM Port",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                if (txtGdmIp.Text.Trim().Length == 0)
+                {
+                    MessageBox.Show(this, "請輸入 IP 位址。", "尚未輸入 IP",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                int port;
+                if (!int.TryParse(txtGdmPort.Text.Trim(), out port) || port < 1 || port > 65535)
+                {
+                    MessageBox.Show(this, "Port 必須是 1~65535 的整數。", "Port 格式錯誤",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+            else
+            {
+                if (cbGdmPort.SelectedItem == null)
+                {
+                    MessageBox.Show(this, "請先選擇 COM Port（按搜尋 COM Port 偵測）。", "尚未選擇 COM Port",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
             }
 
             try
             {
-                _meter.PortName = cbGdmPort.SelectedItem.ToString();
-                _meter.BaudRate = GetSelectedBaud();
+                ApplyGdmConnectionSettings();
                 _meter.Connect();
             }
             catch (Exception ex)
@@ -184,7 +250,9 @@ namespace DX01_ShortCircuitTester
 
             if (g)
             {
-                lblGdmStatus.Text = "● 已連線  GDM8261A  " + _meter.PortName + "  " + _meter.BaudRate;
+                lblGdmStatus.Text = _meter.UseLan
+                    ? "● 已連線  GDM8261A  LAN " + _meter.Ip + ":" + _meter.TcpPort
+                    : "● 已連線  GDM8261A  " + _meter.PortName + "  " + _meter.BaudRate;
                 lblGdmStatus.ForeColor = OkGreen;
             }
             else

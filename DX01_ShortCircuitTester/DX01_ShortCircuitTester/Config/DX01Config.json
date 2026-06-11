@@ -1,5 +1,11 @@
 {
-  "description": "DX01 外殼短路流程判定值。修改後重新啟動程式即生效；找不到此檔或欄位時，使用程式內建預設值。部署時請將本檔放在執行檔旁的 Config 資料夾。",
+  "description": "DX01 外殼短路流程設定。修改後重新啟動程式即生效；找不到此檔或欄位時，使用程式內建預設值。部署時請將本檔放在執行檔旁的 Config 資料夾。",
+
+  "gdm_connectionMode": "Serial",
+  "gdm_comBaud": 115200,
+  "gdm_ip": "192.168.100.100",
+  "gdm_tcpPort": 23,
+
   "step3_caseToChassis_max": 10,
   "step4_pPlusInsulation_min": 1000000,
   "step5_pMinusInsulation_min": 1000000,

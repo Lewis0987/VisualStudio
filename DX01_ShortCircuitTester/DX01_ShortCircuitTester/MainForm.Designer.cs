@@ -56,6 +56,12 @@ namespace DX01_ShortCircuitTester
             this.btnGdmDisconnect = new System.Windows.Forms.Button();
             this.lblGdmStatus = new System.Windows.Forms.Label();
             this.lblGdmIdn = new System.Windows.Forms.Label();
+            this.rbSerial = new System.Windows.Forms.RadioButton();
+            this.rbLan = new System.Windows.Forms.RadioButton();
+            this.lblGdmIpCap = new System.Windows.Forms.Label();
+            this.txtGdmIp = new System.Windows.Forms.TextBox();
+            this.lblGdmTcpPortCap = new System.Windows.Forms.Label();
+            this.txtGdmPort = new System.Windows.Forms.TextBox();
             this.gbRelay = new System.Windows.Forms.GroupBox();
             this.lblRelayInfo = new System.Windows.Forms.Label();
             this.lblRelayStatus = new System.Windows.Forms.Label();
@@ -429,11 +435,17 @@ namespace DX01_ShortCircuitTester
             // gbGdm
             //
             this.gbGdm.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) | System.Windows.Forms.AnchorStyles.Right)));
+            this.gbGdm.Controls.Add(this.rbSerial);
+            this.gbGdm.Controls.Add(this.rbLan);
             this.gbGdm.Controls.Add(this.lblGdmPortCap);
             this.gbGdm.Controls.Add(this.cbGdmPort);
             this.gbGdm.Controls.Add(this.btnGdmRefresh);
             this.gbGdm.Controls.Add(this.lblGdmBaudCap);
             this.gbGdm.Controls.Add(this.cbGdmBaud);
+            this.gbGdm.Controls.Add(this.lblGdmIpCap);
+            this.gbGdm.Controls.Add(this.txtGdmIp);
+            this.gbGdm.Controls.Add(this.lblGdmTcpPortCap);
+            this.gbGdm.Controls.Add(this.txtGdmPort);
             this.gbGdm.Controls.Add(this.btnGdmConnect);
             this.gbGdm.Controls.Add(this.btnGdmDisconnect);
             this.gbGdm.Controls.Add(this.lblGdmStatus);
@@ -444,31 +456,53 @@ namespace DX01_ShortCircuitTester
             this.gbGdm.Size = new System.Drawing.Size(944, 170);
             this.gbGdm.TabIndex = 0;
             this.gbGdm.TabStop = false;
-            this.gbGdm.Text = "GDM-8261A 電表 (RS-232 / USB 序列)";
+            this.gbGdm.Text = "GDM-8261A 電表 (RS-232 / USB 序列 / LAN)";
+            //
+            // rbSerial
+            //
+            this.rbSerial.AutoSize = true;
+            this.rbSerial.Checked = true;
+            this.rbSerial.Location = new System.Drawing.Point(20, 26);
+            this.rbSerial.Name = "rbSerial";
+            this.rbSerial.Size = new System.Drawing.Size(63, 23);
+            this.rbSerial.TabIndex = 0;
+            this.rbSerial.TabStop = true;
+            this.rbSerial.Text = "Serial";
+            this.rbSerial.UseVisualStyleBackColor = true;
+            //
+            // rbLan
+            //
+            this.rbLan.AutoSize = true;
+            this.rbLan.Location = new System.Drawing.Point(130, 26);
+            this.rbLan.Name = "rbLan";
+            this.rbLan.Size = new System.Drawing.Size(92, 23);
+            this.rbLan.TabIndex = 1;
+            this.rbLan.Text = "LAN (TCP)";
+            this.rbLan.UseVisualStyleBackColor = true;
             //
             // lblGdmPortCap
             //
             this.lblGdmPortCap.AutoSize = true;
-            this.lblGdmPortCap.Location = new System.Drawing.Point(24, 44);
+            this.lblGdmPortCap.Location = new System.Drawing.Point(20, 61);
             this.lblGdmPortCap.Name = "lblGdmPortCap";
             this.lblGdmPortCap.Size = new System.Drawing.Size(80, 19);
-            this.lblGdmPortCap.TabIndex = 0;
+            this.lblGdmPortCap.TabIndex = 2;
             this.lblGdmPortCap.Text = "COM Port:";
             //
             // cbGdmPort
             //
             this.cbGdmPort.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbGdmPort.Location = new System.Drawing.Point(120, 40);
+            this.cbGdmPort.Location = new System.Drawing.Point(120, 58);
             this.cbGdmPort.Name = "cbGdmPort";
             this.cbGdmPort.Size = new System.Drawing.Size(150, 27);
-            this.cbGdmPort.TabIndex = 1;
+            this.cbGdmPort.TabIndex = 3;
             //
             // btnGdmRefresh
             //
-            this.btnGdmRefresh.Location = new System.Drawing.Point(284, 39);
+            this.btnGdmRefresh.Location = new System.Drawing.Point(284, 57);
             this.btnGdmRefresh.Name = "btnGdmRefresh";
             this.btnGdmRefresh.Size = new System.Drawing.Size(140, 30);
-            this.btnGdmRefresh.TabIndex = 2;
+            this.btnGdmRefresh.TabIndex = 4;
             this.btnGdmRefresh.Text = "搜尋 COM Port";
             this.btnGdmRefresh.UseVisualStyleBackColor = true;
             this.btnGdmRefresh.Click += new System.EventHandler(this.btnGdmRefresh_Click);
@@ -476,19 +510,57 @@ namespace DX01_ShortCircuitTester
             // lblGdmBaudCap
             //
             this.lblGdmBaudCap.AutoSize = true;
-            this.lblGdmBaudCap.Location = new System.Drawing.Point(24, 84);
+            this.lblGdmBaudCap.Location = new System.Drawing.Point(20, 99);
             this.lblGdmBaudCap.Name = "lblGdmBaudCap";
             this.lblGdmBaudCap.Size = new System.Drawing.Size(84, 19);
-            this.lblGdmBaudCap.TabIndex = 3;
+            this.lblGdmBaudCap.TabIndex = 5;
             this.lblGdmBaudCap.Text = "Baud Rate:";
             //
             // cbGdmBaud
             //
             this.cbGdmBaud.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.cbGdmBaud.Location = new System.Drawing.Point(120, 80);
+            this.cbGdmBaud.Location = new System.Drawing.Point(120, 96);
             this.cbGdmBaud.Name = "cbGdmBaud";
             this.cbGdmBaud.Size = new System.Drawing.Size(150, 27);
-            this.cbGdmBaud.TabIndex = 4;
+            this.cbGdmBaud.TabIndex = 6;
+            //
+            // lblGdmIpCap
+            //
+            this.lblGdmIpCap.AutoSize = true;
+            this.lblGdmIpCap.Location = new System.Drawing.Point(20, 61);
+            this.lblGdmIpCap.Name = "lblGdmIpCap";
+            this.lblGdmIpCap.Size = new System.Drawing.Size(86, 19);
+            this.lblGdmIpCap.TabIndex = 9;
+            this.lblGdmIpCap.Text = "IP Address:";
+            this.lblGdmIpCap.Visible = false;
+            //
+            // txtGdmIp
+            //
+            this.txtGdmIp.Location = new System.Drawing.Point(120, 58);
+            this.txtGdmIp.Name = "txtGdmIp";
+            this.txtGdmIp.Size = new System.Drawing.Size(160, 27);
+            this.txtGdmIp.TabIndex = 10;
+            this.txtGdmIp.Text = "192.168.100.100";
+            this.txtGdmIp.Visible = false;
+            //
+            // lblGdmTcpPortCap
+            //
+            this.lblGdmTcpPortCap.AutoSize = true;
+            this.lblGdmTcpPortCap.Location = new System.Drawing.Point(20, 99);
+            this.lblGdmTcpPortCap.Name = "lblGdmTcpPortCap";
+            this.lblGdmTcpPortCap.Size = new System.Drawing.Size(40, 19);
+            this.lblGdmTcpPortCap.TabIndex = 11;
+            this.lblGdmTcpPortCap.Text = "Port:";
+            this.lblGdmTcpPortCap.Visible = false;
+            //
+            // txtGdmPort
+            //
+            this.txtGdmPort.Location = new System.Drawing.Point(120, 96);
+            this.txtGdmPort.Name = "txtGdmPort";
+            this.txtGdmPort.Size = new System.Drawing.Size(90, 27);
+            this.txtGdmPort.TabIndex = 12;
+            this.txtGdmPort.Text = "23";
+            this.txtGdmPort.Visible = false;
             //
             // btnGdmConnect
             //
@@ -496,10 +568,10 @@ namespace DX01_ShortCircuitTester
             this.btnGdmConnect.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(76)))), ((int)(((byte)(175)))), ((int)(((byte)(80)))));
             this.btnGdmConnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnGdmConnect.ForeColor = System.Drawing.Color.White;
-            this.btnGdmConnect.Location = new System.Drawing.Point(688, 38);
+            this.btnGdmConnect.Location = new System.Drawing.Point(688, 50);
             this.btnGdmConnect.Name = "btnGdmConnect";
             this.btnGdmConnect.Size = new System.Drawing.Size(110, 44);
-            this.btnGdmConnect.TabIndex = 5;
+            this.btnGdmConnect.TabIndex = 7;
             this.btnGdmConnect.Text = "連線";
             this.btnGdmConnect.UseVisualStyleBackColor = false;
             this.btnGdmConnect.Click += new System.EventHandler(this.btnGdmConnect_Click);
@@ -507,10 +579,10 @@ namespace DX01_ShortCircuitTester
             // btnGdmDisconnect
             //
             this.btnGdmDisconnect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnGdmDisconnect.Location = new System.Drawing.Point(810, 38);
+            this.btnGdmDisconnect.Location = new System.Drawing.Point(810, 50);
             this.btnGdmDisconnect.Name = "btnGdmDisconnect";
             this.btnGdmDisconnect.Size = new System.Drawing.Size(110, 44);
-            this.btnGdmDisconnect.TabIndex = 6;
+            this.btnGdmDisconnect.TabIndex = 8;
             this.btnGdmDisconnect.Text = "中斷連線";
             this.btnGdmDisconnect.UseVisualStyleBackColor = true;
             this.btnGdmDisconnect.Click += new System.EventHandler(this.btnGdmDisconnect_Click);
@@ -520,20 +592,20 @@ namespace DX01_ShortCircuitTester
             this.lblGdmStatus.AutoSize = true;
             this.lblGdmStatus.Font = new System.Drawing.Font("Microsoft JhengHei UI", 12F, System.Drawing.FontStyle.Bold);
             this.lblGdmStatus.ForeColor = System.Drawing.Color.Firebrick;
-            this.lblGdmStatus.Location = new System.Drawing.Point(24, 122);
+            this.lblGdmStatus.Location = new System.Drawing.Point(20, 134);
             this.lblGdmStatus.Name = "lblGdmStatus";
             this.lblGdmStatus.Size = new System.Drawing.Size(86, 21);
-            this.lblGdmStatus.TabIndex = 7;
+            this.lblGdmStatus.TabIndex = 13;
             this.lblGdmStatus.Text = "● 未連線";
             //
             // lblGdmIdn
             //
             this.lblGdmIdn.AutoSize = true;
             this.lblGdmIdn.ForeColor = System.Drawing.Color.DimGray;
-            this.lblGdmIdn.Location = new System.Drawing.Point(180, 124);
+            this.lblGdmIdn.Location = new System.Drawing.Point(180, 136);
             this.lblGdmIdn.Name = "lblGdmIdn";
             this.lblGdmIdn.Size = new System.Drawing.Size(0, 19);
-            this.lblGdmIdn.TabIndex = 8;
+            this.lblGdmIdn.TabIndex = 14;
             //
             // gbRelay
             //
@@ -678,6 +750,12 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.Button btnGdmDisconnect;
         private System.Windows.Forms.Label lblGdmStatus;
         private System.Windows.Forms.Label lblGdmIdn;
+        private System.Windows.Forms.RadioButton rbSerial;
+        private System.Windows.Forms.RadioButton rbLan;
+        private System.Windows.Forms.Label lblGdmIpCap;
+        private System.Windows.Forms.TextBox txtGdmIp;
+        private System.Windows.Forms.Label lblGdmTcpPortCap;
+        private System.Windows.Forms.TextBox txtGdmPort;
         private System.Windows.Forms.GroupBox gbRelay;
         private System.Windows.Forms.Label lblRelayInfo;
         private System.Windows.Forms.Label lblRelayStatus;

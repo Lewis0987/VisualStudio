@@ -21,6 +21,22 @@ namespace DX01_ShortCircuitTester.Device
         /// <summary>鮑率，預設 115200。</summary>
         public int BaudRate { get; set; } = 115200;
 
+        /// <summary>
+        /// true = 使用 LAN(TCP)；false = 使用序列埠。
+        /// 代理 GdmConnectionConfig.Mode，使連線模式為單一來源（MainForm 設定此值即更新設定）。
+        /// </summary>
+        public bool UseLan
+        {
+            get { return GdmConnectionConfig.Mode == GdmConnectionMode.Lan; }
+            set { GdmConnectionConfig.Mode = value ? GdmConnectionMode.Lan : GdmConnectionMode.Serial; }
+        }
+
+        /// <summary>LAN 連線 IP，預設 192.168.100.100。</summary>
+        public string Ip { get; set; } = "192.168.100.100";
+
+        /// <summary>LAN 連線 Port，預設 23。</summary>
+        public int TcpPort { get; set; } = 23;
+
         /// <summary>連線後讀回的 *IDN? 機型識別字串。</summary>
         public string Idn { get; private set; }
 
@@ -37,13 +53,27 @@ namespace DX01_ShortCircuitTester.Device
             if (IsConnected)
                 return;
 
-            if (string.IsNullOrEmpty(PortName))
-                throw new InvalidOperationException("尚未選擇 COM Port。");
+            IGdmTransport transport;
+            if (GdmConnectionConfig.Mode == GdmConnectionMode.Lan)
+            {
+                if (string.IsNullOrEmpty(Ip))
+                    throw new InvalidOperationException("尚未輸入 IP 位址。");
 
-            var transport = new SerialTransport(PortName, BaudRate);
-            transport.Open();
-            _transport = transport;
-            WriteLog(LogKind.Info, "電表連線 " + PortName + " @ " + BaudRate + " bps");
+                transport = new TcpTransport(Ip, TcpPort);
+                transport.Open();
+                _transport = transport;
+                WriteLog(LogKind.Info, "電表連線 LAN " + Ip + ":" + TcpPort);
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(PortName))
+                    throw new InvalidOperationException("尚未選擇 COM Port。");
+
+                transport = new SerialTransport(PortName, BaudRate);
+                transport.Open();
+                _transport = transport;
+                WriteLog(LogKind.Info, "電表連線 " + PortName + " @ " + BaudRate + " bps");
+            }
 
             try
             {
