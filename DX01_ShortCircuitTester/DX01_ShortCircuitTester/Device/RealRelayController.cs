@@ -2,7 +2,7 @@ using HidSharp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using DX01_ShortCircuitTester.Services;
+using DX01_ShortCircuitTester.Services; // VID/PID 取自 AppSettings.Current
 
 namespace DX01_ShortCircuitTester.Device
 {
@@ -18,8 +18,6 @@ namespace DX01_ShortCircuitTester.Device
     /// </summary>
     public sealed class RealRelayController : IRelayController
     {
-        private const int VendorId = 0x16C0;
-        private const int ProductId = 0x05DF;
         private const byte ReportId = 0x00;
         private const int ReportSize = 8;
         private const int ReportPacketSize = ReportSize + 1;
@@ -45,7 +43,7 @@ namespace DX01_ShortCircuitTester.Device
         /// <summary>是否偵測得到 Relay Board（不需連線）。</summary>
         public bool DetectDevice()
         {
-            return DeviceList.Local.GetHidDevices(VendorId, ProductId).Any();
+            return DeviceList.Local.GetHidDevices(AppSettings.Current.VendorId, AppSettings.Current.ProductId).Any();
         }
 
         public void Connect()
@@ -53,9 +51,10 @@ namespace DX01_ShortCircuitTester.Device
             if (_stream != null)
                 return;
 
-            List<HidDevice> devices = DeviceList.Local.GetHidDevices(VendorId, ProductId).ToList();
+            List<HidDevice> devices = DeviceList.Local.GetHidDevices(AppSettings.Current.VendorId, AppSettings.Current.ProductId).ToList();
             if (devices.Count == 0)
-                throw new InvalidOperationException("找不到 Relay Board (USB VID/PID 16C0:05DF)。");
+                throw new InvalidOperationException("找不到 Relay Board (USB VID/PID " +
+                    AppSettings.Current.VendorIdHex + ":" + AppSettings.Current.ProductIdHex + ")。");
 
             HidStream stream;
             _device = devices[0];

@@ -39,9 +39,10 @@ namespace DX01_ShortCircuitTester
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            AppSettings.Load();
+
             // 鮑率選項
             cbGdmBaud.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
-            cbGdmBaud.SelectedItem = "115200";
 
             InitDevices();
             BuildDebugUi();
@@ -52,22 +53,15 @@ namespace DX01_ShortCircuitTester
 
             txtBarcode.KeyDown += TxtBarcode_KeyDown;
 
-            _okMsgTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _okMsgTimer = new System.Windows.Forms.Timer { Interval = Math.Max(1, AppSettings.Current.PopupSeconds) * 1000 };
             _okMsgTimer.Tick += (s, ev) => { _okMsgTimer.Stop(); lblBarcodeMsg.Text = ""; };
 
-            // GDM 連線方式（Serial / LAN）：載入設定預設值並切換顯示
-            GdmConnectionConfig.Load();
+            // GDM 連線方式（Serial / LAN）：依設定載入並切換顯示
             rbSerial.CheckedChanged += (s, ev) => UpdateGdmInterfaceUi();
             rbLan.CheckedChanged += (s, ev) => UpdateGdmInterfaceUi();
-            txtGdmIp.Text = GdmConnectionConfig.Ip;
-            txtGdmPort.Text = GdmConnectionConfig.TcpPort.ToString();
-            if (cbGdmBaud.Items.Contains(GdmConnectionConfig.Baud.ToString()))
-                cbGdmBaud.SelectedItem = GdmConnectionConfig.Baud.ToString();
-            if (GdmConnectionConfig.Mode == GdmConnectionMode.Lan)
-                rbLan.Checked = true;
-            else
-                rbSerial.Checked = true;
+            LoadConnectionUiFromSettings();
             UpdateGdmInterfaceUi();
+            ApplyUiSettings();
 
             // 啟動時初始化設備並嘗試連線（失敗則顯示未連線，不跳錯）
             TryAutoConnect();
@@ -125,22 +119,66 @@ namespace DX01_ShortCircuitTester
             txtGdmPort.Visible = lan;
         }
 
-        /// <summary>把 UI 的連線參數套到電表控制器（Serial / LAN）。</summary>
+        /// <summary>把 UI 的連線參數套到電表控制器與 AppSettings（Serial / LAN）。</summary>
         private void ApplyGdmConnectionSettings()
         {
+            var c = AppSettings.Current;
             if (rbLan.Checked)
             {
+                c.ConnectionMode = GdmConnectionMode.Lan;
                 _meter.UseLan = true;
                 _meter.Ip = txtGdmIp.Text.Trim();
                 int port;
                 _meter.TcpPort = int.TryParse(txtGdmPort.Text.Trim(), out port) ? port : 23;
+                c.Ip = _meter.Ip;
+                c.TcpPort = _meter.TcpPort;
             }
             else
             {
+                c.ConnectionMode = GdmConnectionMode.Serial;
                 _meter.UseLan = false;
                 _meter.PortName = cbGdmPort.SelectedItem != null ? cbGdmPort.SelectedItem.ToString() : null;
                 _meter.BaudRate = GetSelectedBaud();
+                c.ComBaud = _meter.BaudRate;
             }
+        }
+
+        /// <summary>依 AppSettings 載入連線方式 UI（IP/Port/Baud/Radio）。</summary>
+        private void LoadConnectionUiFromSettings()
+        {
+            var c = AppSettings.Current;
+            txtGdmIp.Text = c.Ip;
+            txtGdmPort.Text = c.TcpPort.ToString();
+            string baud = c.ComBaud.ToString();
+            cbGdmBaud.SelectedItem = cbGdmBaud.Items.Contains(baud) ? baud : "115200";
+            if (c.ConnectionMode == GdmConnectionMode.Lan)
+                rbLan.Checked = true;
+            else
+                rbSerial.Checked = true;
+        }
+
+        /// <summary>套用 UI / 執行參數（字級、Popup 秒數、Relay VID/PID 顯示）。</summary>
+        private void ApplyUiSettings()
+        {
+            var c = AppSettings.Current;
+            lblCurrentStep.Font = new Font(lblCurrentStep.Font.FontFamily, Math.Max(8, c.StepFontSize), FontStyle.Bold);
+            if (_okMsgTimer != null)
+                _okMsgTimer.Interval = Math.Max(1, c.PopupSeconds) * 1000;
+            if (lblRelayInfo != null)
+                lblRelayInfo.Text = "USB HID 自動偵測  VID/PID: " + c.VendorIdHex + " / " + c.ProductIdHex;
+        }
+
+        /// <summary>開啟參數設定對話框，關閉後刷新相關 UI。</summary>
+        private void OpenSettingForm()
+        {
+            using (var f = new SettingForm())
+            {
+                f.ShowDialog(this);
+            }
+            LoadConnectionUiFromSettings();
+            UpdateGdmInterfaceUi();
+            ApplyUiSettings();
+            UpdateConnStatus();
         }
 
         #region 設備設定頁
@@ -307,7 +345,7 @@ namespace DX01_ShortCircuitTester
             string sn = txtBarcode.Text.Trim();
 
             // 條碼/序號規則檢查（Config: barcodeRegex，空字串=不檢查）
-            string pattern = GdmConnectionConfig.BarcodeRegex;
+            string pattern = AppSettings.Current.BarcodeRegex;
             if (!string.IsNullOrEmpty(pattern))
             {
                 bool match;

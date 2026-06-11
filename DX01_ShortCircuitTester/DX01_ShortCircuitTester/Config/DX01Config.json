@@ -1,13 +1,13 @@
 {
-  "description": "DX01 外殼短路流程設定 (V1.1)。修改後重新啟動程式即生效；找不到此檔或欄位時，使用程式內建預設值。部署時請將本檔放在執行檔旁的 Config 資料夾。",
-
+  "description": "DX01 外殼短路流程設定 (V1.2)。由參數設定視窗或手動編輯；找不到欄位時 StepWaitMs=0、其餘用內建預設。",
   "gdm_connectionMode": "Lan",
-  "gdm_comBaud": 115200,
   "gdm_ip": "192.168.100.100",
   "gdm_tcpPort": 23,
-
+  "gdm_comBaud": 115200,
+  "vendorIdHex": "0x16C0",
+  "productIdHex": "0x05DF",
+  "debugLevel": "debug",
   "barcodeRegex": "^DX01[0-9]{8}$",
-
   "step3_caseToChassis_max": 10,
   "step4_pPlusInsulation_min": 1000000,
   "step5_pMinusInsulation_min": 1000000,
@@ -16,16 +16,21 @@
   "step8_pPlusMinusVoltage_max": 51,
   "step9_pPlusToCaseVoltage_max": 1,
   "step10_pMinusToCaseVoltage_max": 1,
-
-  "stepDelayMs": 350,
-  "Step1WaitMs": 500,
-  "Step2WaitMs": 300,
-  "Step3WaitMs": 500,
-  "Step4WaitMs": 500,
-  "Step5WaitMs": 500,
-  "Step6WaitMs": 500,
+  "current_min": 0,
+  "current_max": 0,
+  "Step1WaitMs": 0,
+  "Step2WaitMs": 0,
+  "Step3WaitMs": 0,
+  "Step4WaitMs": 0,
+  "Step5WaitMs": 0,
+  "Step6WaitMs": 0,
   "Step7WaitMs": 10000,
-  "Step8WaitMs": 1000,
-  "Step9WaitMs": 500,
-  "Step10WaitMs": 500
+  "Step8WaitMs": 0,
+  "Step9WaitMs": 0,
+  "Step10WaitMs": 0,
+  "PopupSeconds": 3,
+  "StepFontSize": 20,
+  "PollIntervalMs": 100,
+  "ReadTimeoutMs": 5000,
+  "RelaySwitchDelayMs": 300
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using DX01_ShortCircuitTester.Services;
+// 連線模式以 AppSettings.Current.ConnectionMode 為單一來源
 
 namespace DX01_ShortCircuitTester.Device
 {
@@ -27,8 +28,8 @@ namespace DX01_ShortCircuitTester.Device
         /// </summary>
         public bool UseLan
         {
-            get { return GdmConnectionConfig.Mode == GdmConnectionMode.Lan; }
-            set { GdmConnectionConfig.Mode = value ? GdmConnectionMode.Lan : GdmConnectionMode.Serial; }
+            get { return AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan; }
+            set { AppSettings.Current.ConnectionMode = value ? GdmConnectionMode.Lan : GdmConnectionMode.Serial; }
         }
 
         /// <summary>LAN 連線 IP，預設 192.168.100.100。</summary>
@@ -54,7 +55,7 @@ namespace DX01_ShortCircuitTester.Device
                 return;
 
             IGdmTransport transport;
-            if (GdmConnectionConfig.Mode == GdmConnectionMode.Lan)
+            if (AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan)
             {
                 if (string.IsNullOrEmpty(Ip))
                     throw new InvalidOperationException("尚未輸入 IP 位址。");

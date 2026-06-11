@@ -304,9 +304,10 @@ namespace DX01_ShortCircuitTester
             this.dgvResults.AllowUserToAddRows = false;
             this.dgvResults.AllowUserToDeleteRows = false;
             this.dgvResults.AllowUserToResizeColumns = true;
-            this.dgvResults.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.None;
+            this.dgvResults.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
             this.dgvResults.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.dgvResults.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            this.dgvResults.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.EnableResizing;
+            this.dgvResults.ColumnHeadersHeight = 32;
             this.dgvResults.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
                 this.colStep,
                 this.colName,
@@ -322,59 +323,59 @@ namespace DX01_ShortCircuitTester
             this.dgvResults.Name = "dgvResults";
             this.dgvResults.ReadOnly = true;
             this.dgvResults.RowHeadersVisible = false;
-            this.dgvResults.RowTemplate.Height = 30;
+            this.dgvResults.RowTemplate.Height = 28;
             this.dgvResults.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
             this.dgvResults.Size = new System.Drawing.Size(954, 402);
             this.dgvResults.TabIndex = 2;
             //
             // colStep
             //
+            this.colStep.FillWeight = 60F;
             this.colStep.HeaderText = "步驟";
             this.colStep.Name = "colStep";
             this.colStep.ReadOnly = true;
-            this.colStep.Width = 60;
             //
             // colName
             //
+            this.colName.FillWeight = 180F;
             this.colName.HeaderText = "名稱";
             this.colName.Name = "colName";
             this.colName.ReadOnly = true;
-            this.colName.Width = 180;
             //
             // colRelay
             //
+            this.colRelay.FillWeight = 80F;
             this.colRelay.HeaderText = "Relay";
             this.colRelay.Name = "colRelay";
             this.colRelay.ReadOnly = true;
-            this.colRelay.Width = 80;
             //
             // colMode
             //
+            this.colMode.FillWeight = 120F;
             this.colMode.HeaderText = "模式";
             this.colMode.Name = "colMode";
             this.colMode.ReadOnly = true;
-            this.colMode.Width = 120;
             //
             // colValue
             //
+            this.colValue.FillWeight = 140F;
             this.colValue.HeaderText = "量測值";
             this.colValue.Name = "colValue";
             this.colValue.ReadOnly = true;
-            this.colValue.Width = 140;
             //
             // colLimit
             //
+            this.colLimit.FillWeight = 180F;
             this.colLimit.HeaderText = "判定條件";
             this.colLimit.Name = "colLimit";
             this.colLimit.ReadOnly = true;
-            this.colLimit.Width = 180;
             //
             // colResult
             //
+            this.colResult.FillWeight = 100F;
             this.colResult.HeaderText = "結果";
             this.colResult.Name = "colResult";
             this.colResult.ReadOnly = true;
-            this.colResult.Width = 100;
             //
             // panelFooter
             //
@@ -438,22 +439,22 @@ namespace DX01_ShortCircuitTester
             // rbSerial
             //
             this.rbSerial.AutoSize = true;
-            this.rbSerial.Checked = true;
-            this.rbSerial.Location = new System.Drawing.Point(20, 26);
+            this.rbSerial.Location = new System.Drawing.Point(150, 26);
             this.rbSerial.Name = "rbSerial";
             this.rbSerial.Size = new System.Drawing.Size(63, 23);
-            this.rbSerial.TabIndex = 0;
-            this.rbSerial.TabStop = true;
+            this.rbSerial.TabIndex = 1;
             this.rbSerial.Text = "Serial";
             this.rbSerial.UseVisualStyleBackColor = true;
             //
             // rbLan
             //
             this.rbLan.AutoSize = true;
-            this.rbLan.Location = new System.Drawing.Point(130, 26);
+            this.rbLan.Checked = true;
+            this.rbLan.Location = new System.Drawing.Point(20, 26);
             this.rbLan.Name = "rbLan";
             this.rbLan.Size = new System.Drawing.Size(92, 23);
-            this.rbLan.TabIndex = 1;
+            this.rbLan.TabIndex = 0;
+            this.rbLan.TabStop = true;
             this.rbLan.Text = "LAN (TCP)";
             this.rbLan.UseVisualStyleBackColor = true;
             //

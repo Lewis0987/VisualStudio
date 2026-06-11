@@ -1,0 +1,340 @@
+using System;
+using System.Drawing;
+using System.Globalization;
+using System.Text;
+using System.Windows.Forms;
+using DX01_ShortCircuitTester.Services;
+
+namespace DX01_ShortCircuitTester
+{
+    /// <summary>
+    /// 參數設定對話框。讀取 / 編輯 AppSettings.Current；
+    /// 套用 = 只更新記憶體；儲存 = 更新記憶體並寫入 Config\DX01Config.json。
+    /// </summary>
+    public partial class SettingForm : Form
+    {
+        // 1. 設備連線
+        private TextBox txtLanIp, txtLanPort, txtVendorIdHex, txtProductIdHex;
+        private ComboBox cbDebugLevel;
+        // 2. 條碼
+        private TextBox txtBarcodeRegex;
+        // 3. 電阻
+        private TextBox txtIRUpper, txtOLValue;
+        // 4. 電壓
+        private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper;
+        // 5. 電流
+        private TextBox txtCurrentMin, txtCurrentMax;
+        // 6. Step 等待
+        private readonly TextBox[] _stepBoxes = new TextBox[11];
+        // 7. UI / 執行
+        private TextBox txtPopupSeconds, txtStepFontSize, txtPollIntervalMs, txtReadTimeoutMs, txtRelaySwitchDelayMs;
+
+        private Button btnSave, btnCancel;
+
+        private int _y;
+        private Panel _body;
+
+        private bool _saved;
+        private string _originalSnapshot;
+
+        public SettingForm()
+        {
+            InitializeComponent();
+            BuildUi();
+            LoadFromSettings();
+            _originalSnapshot = BuildSnapshot();
+        }
+
+        private void BuildUi()
+        {
+            _body = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(4) };
+            Controls.Add(_body);
+
+            var pnlButtons = new Panel { Dock = DockStyle.Bottom, Height = 52 };
+            Controls.Add(pnlButtons);
+
+            btnCancel = new Button { Text = "取消", Size = new Size(100, 34), Location = new Point(470 - 112, 9), Anchor = AnchorStyles.Right };
+            btnSave = new Button { Text = "儲存", Size = new Size(100, 34), Location = new Point(470 - 220, 9), Anchor = AnchorStyles.Right };
+            btnCancel.Click += (s, e) => Close();
+            btnSave.Click += BtnSave_Click;
+            pnlButtons.Controls.Add(btnSave);
+            pnlButtons.Controls.Add(btnCancel);
+
+            _y = 10;
+
+            Header("1. 設備連線");
+            txtLanIp = TxtRow("LanIP");
+            txtLanPort = TxtRow("LanPort");
+            txtVendorIdHex = TxtRow("VendorIdHex");
+            txtProductIdHex = TxtRow("ProductIdHex");
+            cbDebugLevel = ComboRow("DebugLevel", new[] { "error", "info", "debug" });
+
+            Header("2. 條碼 / 序號規則");
+            txtBarcodeRegex = TxtRow("BarcodeRegex");
+
+            Header("3. 電阻條件");
+            txtIRUpper = TxtRow("IRUpper(Ω)  → step3");
+            txtOLValue = TxtRow("OLValue(Ω)  → step4/5");
+
+            Header("4. 電壓條件");
+            txtVoltUpper = TxtRow("VoltUpper(V)  → step8 max");
+            txtVoltLower = TxtRow("VoltLower(V)  → step8 min");
+            txtVoltOn = TxtRow("VoltOn(V)  → step7 min");
+            txtVoltIsoUpper = TxtRow("VoltIsoUpper(V)  → step9/10");
+
+            Header("5. 電流條件 (保留)");
+            txtCurrentMin = TxtRow("CurrentMin(A)");
+            txtCurrentMax = TxtRow("CurrentMax(A)");
+
+            Header("6. Step 等待時間 (ms，空白=0)");
+            for (int i = 1; i <= 10; i++)
+                _stepBoxes[i] = TxtRow("Step" + i + "WaitMs");
+
+            Header("7. UI / 執行參數");
+            txtPopupSeconds = TxtRow("PopupSeconds");
+            txtStepFontSize = TxtRow("StepFontSize");
+            txtPollIntervalMs = TxtRow("PollIntervalMs");
+            txtReadTimeoutMs = TxtRow("ReadTimeoutMs");
+            txtRelaySwitchDelayMs = TxtRow("RelaySwitchDelayMs");
+        }
+
+        private void Header(string text)
+        {
+            var l = new Label
+            {
+                Text = text,
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                ForeColor = Color.SteelBlue,
+                Location = new Point(8, _y + 6)
+            };
+            _body.Controls.Add(l);
+            _y += 34;
+        }
+
+        private TextBox TxtRow(string label)
+        {
+            var l = new Label { Text = label, AutoSize = true, Location = new Point(20, _y + 5) };
+            var t = new TextBox { Location = new Point(230, _y), Width = 200 };
+            _body.Controls.Add(l);
+            _body.Controls.Add(t);
+            _y += 32;
+            return t;
+        }
+
+        private ComboBox ComboRow(string label, string[] items)
+        {
+            var l = new Label { Text = label, AutoSize = true, Location = new Point(20, _y + 5) };
+            var c = new ComboBox { Location = new Point(230, _y), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
+            c.Items.AddRange(items);
+            _body.Controls.Add(l);
+            _body.Controls.Add(c);
+            _y += 32;
+            return c;
+        }
+
+        private void LoadFromSettings()
+        {
+            var c = AppSettings.Current;
+            txtLanIp.Text = c.Ip;
+            txtLanPort.Text = c.TcpPort.ToString(CultureInfo.InvariantCulture);
+            txtVendorIdHex.Text = c.VendorIdHex;
+            txtProductIdHex.Text = c.ProductIdHex;
+            cbDebugLevel.SelectedItem = c.DebugLevel;
+            if (cbDebugLevel.SelectedIndex < 0) cbDebugLevel.SelectedItem = "debug";
+
+            txtBarcodeRegex.Text = c.BarcodeRegex;
+
+            txtIRUpper.Text = Dbl(c.Step3CaseToChassisMax);
+            txtOLValue.Text = Dbl(c.Step4PPlusInsulationMin);
+
+            txtVoltUpper.Text = Dbl(c.Step8PPlusMinusMax);
+            txtVoltLower.Text = Dbl(c.Step8PPlusMinusMin);
+            txtVoltOn.Text = Dbl(c.Step7TotalVoltageMin);
+            txtVoltIsoUpper.Text = Dbl(c.Step9PPlusToCaseMax);
+
+            txtCurrentMin.Text = Dbl(c.CurrentMin);
+            txtCurrentMax.Text = Dbl(c.CurrentMax);
+
+            for (int i = 1; i <= 10; i++)
+                _stepBoxes[i].Text = c.StepWaitMs[i].ToString(CultureInfo.InvariantCulture);
+
+            txtPopupSeconds.Text = c.PopupSeconds.ToString(CultureInfo.InvariantCulture);
+            txtStepFontSize.Text = c.StepFontSize.ToString(CultureInfo.InvariantCulture);
+            txtPollIntervalMs.Text = c.PollIntervalMs.ToString(CultureInfo.InvariantCulture);
+            txtReadTimeoutMs.Text = c.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
+            txtRelaySwitchDelayMs.Text = c.RelaySwitchDelayMs.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string Dbl(double v)
+        {
+            return v.ToString("0.######", CultureInfo.InvariantCulture);
+        }
+
+        private void BtnSave_Click(object sender, EventArgs e)
+        {
+            string err;
+            if (!TryCollect(out err))
+            {
+                MessageBox.Show(this, err, "設定錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string saveErr;
+            if (!AppSettings.Current.Save(out saveErr))
+            {
+                MessageBox.Show(this, "儲存失敗:\n" + saveErr, "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            MessageBox.Show(this, "設定已儲存", "參數設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _saved = true;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        /// <summary>取消 / 關閉時，若有未儲存修改則詢問是否放棄。</summary>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!_saved && BuildSnapshot() != _originalSnapshot)
+            {
+                DialogResult r = MessageBox.Show(this, "尚有未儲存的修改，確定放棄?", "放棄修改",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (r != DialogResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+                DialogResult = DialogResult.Cancel;
+            }
+            base.OnFormClosing(e);
+        }
+
+        /// <summary>目前所有欄位值的快照，用於偵測是否有未儲存修改。</summary>
+        private string BuildSnapshot()
+        {
+            var sb = new StringBuilder();
+            sb.Append(txtLanIp.Text).Append('|').Append(txtLanPort.Text).Append('|')
+              .Append(txtVendorIdHex.Text).Append('|').Append(txtProductIdHex.Text).Append('|')
+              .Append(cbDebugLevel.SelectedItem).Append('|').Append(txtBarcodeRegex.Text).Append('|')
+              .Append(txtIRUpper.Text).Append('|').Append(txtOLValue.Text).Append('|')
+              .Append(txtVoltUpper.Text).Append('|').Append(txtVoltLower.Text).Append('|')
+              .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|')
+              .Append(txtCurrentMin.Text).Append('|').Append(txtCurrentMax.Text).Append('|');
+            for (int i = 1; i <= 10; i++)
+                sb.Append(_stepBoxes[i].Text).Append('|');
+            sb.Append(txtPopupSeconds.Text).Append('|').Append(txtStepFontSize.Text).Append('|')
+              .Append(txtPollIntervalMs.Text).Append('|').Append(txtReadTimeoutMs.Text).Append('|')
+              .Append(txtRelaySwitchDelayMs.Text);
+            return sb.ToString();
+        }
+
+        /// <summary>驗證所有欄位並寫入 AppSettings.Current（全部通過才寫入）。</summary>
+        private bool TryCollect(out string err)
+        {
+            err = null;
+            double irUpper, olValue, voltUpper, voltLower, voltOn, voltIso, curMin, curMax;
+            if (!PD(txtIRUpper, "IRUpper", out irUpper, ref err)) return false;
+            if (!PD(txtOLValue, "OLValue", out olValue, ref err)) return false;
+            if (!PD(txtVoltUpper, "VoltUpper", out voltUpper, ref err)) return false;
+            if (!PD(txtVoltLower, "VoltLower", out voltLower, ref err)) return false;
+            if (!PD(txtVoltOn, "VoltOn", out voltOn, ref err)) return false;
+            if (!PD(txtVoltIsoUpper, "VoltIsoUpper", out voltIso, ref err)) return false;
+            if (!PD(txtCurrentMin, "CurrentMin", out curMin, ref err)) return false;
+            if (!PD(txtCurrentMax, "CurrentMax", out curMax, ref err)) return false;
+
+            int lanPort;
+            if (!PI(txtLanPort, "LanPort", out lanPort, ref err)) return false;
+            if (lanPort < 1 || lanPort > 65535) { err = "LanPort 必須是 1~65535。"; return false; }
+
+            int vid, pid;
+            if (!PHex(txtVendorIdHex, "VendorIdHex", out vid, ref err)) return false;
+            if (!PHex(txtProductIdHex, "ProductIdHex", out pid, ref err)) return false;
+
+            var waits = new int[11];
+            for (int i = 1; i <= 10; i++)
+                if (!PWait(_stepBoxes[i], "Step" + i + "WaitMs", out waits[i], ref err)) return false;
+
+            int popup, font, poll, readTo, relayDelay;
+            if (!PI(txtPopupSeconds, "PopupSeconds", out popup, ref err)) return false;
+            if (!PI(txtStepFontSize, "StepFontSize", out font, ref err)) return false;
+            if (!PI(txtPollIntervalMs, "PollIntervalMs", out poll, ref err)) return false;
+            if (!PI(txtReadTimeoutMs, "ReadTimeoutMs", out readTo, ref err)) return false;
+            if (!PI(txtRelaySwitchDelayMs, "RelaySwitchDelayMs", out relayDelay, ref err)) return false;
+
+            if (txtLanIp.Text.Trim().Length == 0) { err = "LanIP 不可空白。"; return false; }
+
+            var c = AppSettings.Current;
+            c.Ip = txtLanIp.Text.Trim();
+            c.TcpPort = lanPort;
+            c.VendorId = vid;
+            c.ProductId = pid;
+            c.DebugLevel = cbDebugLevel.SelectedItem != null ? cbDebugLevel.SelectedItem.ToString() : "debug";
+            c.BarcodeRegex = txtBarcodeRegex.Text.Trim();
+
+            c.Step3CaseToChassisMax = irUpper;
+            c.Step4PPlusInsulationMin = olValue;
+            c.Step5PMinusInsulationMin = olValue;
+            c.Step7TotalVoltageMin = voltOn;
+            c.Step8PPlusMinusMin = voltLower;
+            c.Step8PPlusMinusMax = voltUpper;
+            c.Step9PPlusToCaseMax = voltIso;
+            c.Step10PMinusToCaseMax = voltIso;
+
+            c.CurrentMin = curMin;
+            c.CurrentMax = curMax;
+
+            for (int i = 1; i <= 10; i++)
+                c.StepWaitMs[i] = waits[i];
+
+            c.PopupSeconds = popup;
+            c.StepFontSize = font;
+            c.PollIntervalMs = poll;
+            c.ReadTimeoutMs = readTo;
+            c.RelaySwitchDelayMs = relayDelay;
+            return true;
+        }
+
+        private static bool PD(TextBox t, string name, out double v, ref string err)
+        {
+            if (double.TryParse(t.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v))
+                return true;
+            err = name + " 必須是數字。";
+            return false;
+        }
+
+        private static bool PI(TextBox t, string name, out int v, ref string err)
+        {
+            if (int.TryParse(t.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out v))
+                return true;
+            err = name + " 必須是整數。";
+            return false;
+        }
+
+        private static bool PWait(TextBox t, string name, out int v, ref string err)
+        {
+            v = 0;
+            string s = t.Text.Trim();
+            if (s.Length == 0) { v = 0; return true; } // 空白 = 0
+            if (!int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v))
+            {
+                err = name + " 必須是整數或空白。";
+                return false;
+            }
+            if (v < 0) { err = name + " 不可為負數。"; return false; }
+            return true;
+        }
+
+        private static bool PHex(TextBox t, string name, out int v, ref string err)
+        {
+            v = 0;
+            string s = t.Text.Trim();
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring(2);
+            if (int.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out v))
+                return true;
+            err = name + " 必須是 16 進位 (例如 0x16C0)。";
+            return false;
+        }
+    }
+}

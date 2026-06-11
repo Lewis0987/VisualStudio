@@ -27,6 +27,8 @@ namespace DX01_ShortCircuitTester
         private Label lblDevInfoGdm;
         private Label lblDevInfoRelay;
 
+        private Button btnSettings;
+
         /// <summary>建立 Debug Log 分頁與設備測試區，並把日誌接到設備控制器。</summary>
         private void BuildDebugUi()
         {
@@ -125,6 +127,18 @@ namespace DX01_ShortCircuitTester
             gbDevInfo.Controls.Add(lblDevInfoGdm);
             gbDevInfo.Controls.Add(lblDevInfoRelay);
             tabDevice.Controls.Add(gbDevInfo);
+
+            // ===== 參數設定按鈕 =====
+            btnSettings = new Button
+            {
+                Text = "參數設定…",
+                Location = new Point(16, 592),
+                Size = new Size(200, 40),
+                Font = new Font("Microsoft JhengHei UI", 11F),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left
+            };
+            btnSettings.Click += (s, e) => OpenSettingForm();
+            tabDevice.Controls.Add(btnSettings);
         }
 
         private void OnLogEntry(object sender, LogEventArgs e)
@@ -142,6 +156,9 @@ namespace DX01_ShortCircuitTester
 
         private void AppendLog(LogEventArgs e)
         {
+            if (!AllowLog(e.Kind, AppSettings.Current.DebugLevel))
+                return;
+
             Color color;
             string prefix;
             switch (e.Kind)
@@ -165,6 +182,16 @@ namespace DX01_ShortCircuitTester
             rtbLog.AppendText(string.Format("[{0:HH:mm:ss.fff}] {1}{2}{3}",
                 e.Time, prefix, e.Message, Environment.NewLine));
             rtbLog.ScrollToCaret();
+        }
+
+        /// <summary>依 DebugLevel 過濾：error=只錯誤；info=錯誤/Relay/Info；debug=全部。</summary>
+        private static bool AllowLog(LogKind kind, string level)
+        {
+            if (string.Equals(level, "debug", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (string.Equals(level, "info", StringComparison.OrdinalIgnoreCase))
+                return kind != LogKind.Tx && kind != LogKind.Rx;
+            return kind == LogKind.Error; // error 或未知
         }
 
         // ===== 設備測試：Relay 00→01→10→11 逐步切換 =====
