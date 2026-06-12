@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,6 +18,11 @@ namespace DX01_ShortCircuitTester
         private TabPage tabLog;
         private RichTextBox rtbLog;
         private Button btnClearLog;
+
+        // Debug Log 批次更新：背景流程只入佇列，UI Timer 定時批次寫入，避免跨執行緒 / 大量 AppendText 卡頓
+        private readonly Queue<LogEventArgs> _logQueue = new Queue<LogEventArgs>();
+        private readonly object _logLock = new object();
+        private System.Windows.Forms.Timer _logFlushTimer;
 
         private GroupBox gbDevTest;
         private Button btnRelayCycle;
@@ -42,7 +48,12 @@ namespace DX01_ShortCircuitTester
 
             var logBar = new Panel { Dock = DockStyle.Top, Height = 38 };
             btnClearLog = new Button { Text = "清除 Log", Location = new Point(8, 5), Size = new Size(100, 28) };
-            btnClearLog.Click += (s, e) => rtbLog.Clear();
+            btnClearLog.Click += (s, e) =>
+            {
+                lock (_logLock) { _logQueue.Clear(); }
+                try { if (rtbLog != null && !rtbLog.IsDisposed) rtbLog.Clear(); }
+                catch { }
+            };
             logBar.Controls.Add(btnClearLog);
 
             rtbLog = new RichTextBox
@@ -59,12 +70,20 @@ namespace DX01_ShortCircuitTester
             tabLog.Controls.Add(logBar);
             tabMain.TabPages.Add(tabLog);
 
+            // 切換頁籤時只「顯示目前 Log」並捲到底，不重建控制項、不清空
+            tabMain.SelectedIndexChanged += TabMain_SelectedIndexChanged;
+
+            // UI Timer：每 300ms 把佇列中的 Log 批次寫入畫面
+            _logFlushTimer = new System.Windows.Forms.Timer { Interval = 300 };
+            _logFlushTimer.Tick += (s, e) => FlushLogQueue();
+            _logFlushTimer.Start();
+
             // ===== 設備測試區（加到「設備設定」頁） =====
             gbDevTest = new GroupBox
             {
                 Text = "設備測試 (實機驗證)",
                 Font = new Font("Microsoft JhengHei UI", 11F),
-                Location = new Point(16, 360),
+                Location = new Point(16, 400),
                 Size = new Size(944, 120),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
@@ -106,7 +125,7 @@ namespace DX01_ShortCircuitTester
             {
                 Text = "設備資訊",
                 Font = new Font("Microsoft JhengHei UI", 11F),
-                Location = new Point(16, 490),
+                Location = new Point(16, 530),
                 Size = new Size(944, 92),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
@@ -132,7 +151,7 @@ namespace DX01_ShortCircuitTester
             btnSettings = new Button
             {
                 Text = "參數設定…",
-                Location = new Point(16, 592),
+                Location = new Point(16, 632),
                 Size = new Size(200, 40),
                 Font = new Font("Microsoft JhengHei UI", 11F),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left
@@ -141,24 +160,68 @@ namespace DX01_ShortCircuitTester
             tabDevice.Controls.Add(btnSettings);
         }
 
+        /// <summary>
+        /// 日誌事件處理：可能來自任何執行緒。只做過濾 + 入佇列，不直接碰 UI 控制項，
+        /// 由 UI Timer（FlushLogQueue）批次更新，徹底避免跨執行緒存取。
+        /// </summary>
         private void OnLogEntry(object sender, LogEventArgs e)
         {
-            if (rtbLog == null)
-                return;
-
-            if (rtbLog.InvokeRequired)
+            try
             {
-                rtbLog.BeginInvoke(new Action(() => AppendLog(e)));
-                return;
+                if (e == null)
+                    return;
+                if (!AllowLog(e.Kind, AppSettings.Current.DebugLevel))
+                    return;
+
+                lock (_logLock)
+                {
+                    _logQueue.Enqueue(e);
+                    // 佇列本身也設上限，避免背景大量寫入造成記憶體成長
+                    int cap = Math.Max(500, AppSettings.Current.MaxDebugLogLines * 2);
+                    while (_logQueue.Count > cap)
+                        _logQueue.Dequeue();
+                }
             }
-            AppendLog(e);
+            catch
+            {
+                // Debug Log 寫入失敗不可中斷測試流程
+            }
         }
 
-        private void AppendLog(LogEventArgs e)
+        /// <summary>UI 執行緒批次將佇列內容寫入 RichTextBox（含 IsDisposed/IsHandleCreated 與例外保護）。</summary>
+        private void FlushLogQueue()
         {
-            if (!AllowLog(e.Kind, AppSettings.Current.DebugLevel))
+            if (rtbLog == null || rtbLog.IsDisposed || !rtbLog.IsHandleCreated)
                 return;
 
+            LogEventArgs[] batch;
+            lock (_logLock)
+            {
+                if (_logQueue.Count == 0)
+                    return;
+                batch = _logQueue.ToArray();
+                _logQueue.Clear();
+            }
+
+            try
+            {
+                foreach (var e in batch)
+                    AppendLogLine(e);
+
+                TrimLog();
+
+                rtbLog.SelectionStart = rtbLog.TextLength;
+                rtbLog.ScrollToCaret();
+            }
+            catch
+            {
+                // 忽略 UI log 例外，不影響測試流程
+            }
+        }
+
+        /// <summary>將單筆日誌依類別上色後 append（僅在 UI 執行緒呼叫）。</summary>
+        private void AppendLogLine(LogEventArgs e)
+        {
             Color color;
             string prefix;
             switch (e.Kind)
@@ -170,18 +233,50 @@ namespace DX01_ShortCircuitTester
                 default: color = Color.DimGray; prefix = ""; break;
             }
 
-            // 防止 Log 無限成長
-            if (rtbLog.TextLength > 120000)
-            {
-                rtbLog.Select(0, 40000);
-                rtbLog.SelectedText = "";
-            }
-
             rtbLog.SelectionStart = rtbLog.TextLength;
             rtbLog.SelectionColor = color;
             rtbLog.AppendText(string.Format("[{0:HH:mm:ss.fff}] {1}{2}{3}",
                 e.Time, prefix, e.Message, Environment.NewLine));
-            rtbLog.ScrollToCaret();
+        }
+
+        /// <summary>限制最大行數（MaxDebugLogLines），超過則移除最舊的行。</summary>
+        private void TrimLog()
+        {
+            int max = AppSettings.Current.MaxDebugLogLines;
+            if (max <= 0)
+                return;
+
+            int lineCount = rtbLog.Lines.Length;
+            if (lineCount <= max)
+                return;
+
+            int removeLines = lineCount - max;
+            int cut = rtbLog.GetFirstCharIndexFromLine(removeLines);
+            if (cut > 0)
+            {
+                rtbLog.Select(0, cut);
+                rtbLog.SelectedText = "";
+            }
+        }
+
+        /// <summary>切換到 Debug Log 頁籤時：只顯示目前 Log 並捲到底（不重建 / 不清空）。</summary>
+        private void TabMain_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (tabMain.SelectedTab != tabLog)
+                return;
+            if (rtbLog == null || rtbLog.IsDisposed || !rtbLog.IsHandleCreated)
+                return;
+
+            try
+            {
+                FlushLogQueue(); // 先把待寫入的批次顯示出來
+                rtbLog.SelectionStart = rtbLog.TextLength;
+                rtbLog.ScrollToCaret();
+            }
+            catch
+            {
+                // 顯示錯誤不可中斷流程
+            }
         }
 
         /// <summary>依 DebugLevel 過濾：error=只錯誤；info=錯誤/Relay/Info；debug=全部。</summary>
@@ -263,9 +358,13 @@ namespace DX01_ShortCircuitTester
             catch (Exception ex)
             {
                 _debugLog.Write(LogKind.Error, "電表測試失敗: " + ex.Message);
-                MessageBox.Show(this, "電表測試失敗:\n" + ex.Message, "錯誤",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 UpdateConnStatus();
+                // 通訊失敗時連線已被釋放：LAN 斷線顯示專用提示，否則顯示一般錯誤
+                if (_meter.UseLan && !_meter.IsConnected)
+                    NotifyLanDisconnected();
+                else
+                    MessageBox.Show(this, "電表測試失敗:\n" + ex.Message, "錯誤",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {

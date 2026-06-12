@@ -32,5 +32,10 @@
   "StepFontSize": 20,
   "PollIntervalMs": 100,
   "ReadTimeoutMs": 5000,
-  "RelaySwitchDelayMs": 300
+  "RelaySwitchDelayMs": 300,
+  "ConnectTimeoutMs": 3000,
+  "ReconnectDelayMs": 500,
+  "ReconnectRetryCount": 3,
+  "MaxDebugLogLines": 2000,
+  "GdmMonitorIntervalMs": 1000
 }

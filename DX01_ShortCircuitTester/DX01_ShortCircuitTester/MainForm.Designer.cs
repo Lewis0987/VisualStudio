@@ -43,7 +43,8 @@ namespace DX01_ShortCircuitTester
             this.colLimit = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colResult = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.panelFooter = new System.Windows.Forms.Panel();
-            this.lblConn = new System.Windows.Forms.Label();
+            this.lblConnGdm = new System.Windows.Forms.Label();
+            this.lblConnRelay = new System.Windows.Forms.Label();
             this.lblInfo = new System.Windows.Forms.Label();
             this.gbGdm = new System.Windows.Forms.GroupBox();
             this.lblGdmPortCap = new System.Windows.Forms.Label();
@@ -64,7 +65,6 @@ namespace DX01_ShortCircuitTester
             this.gbRelay = new System.Windows.Forms.GroupBox();
             this.lblRelayInfo = new System.Windows.Forms.Label();
             this.lblRelayStatus = new System.Windows.Forms.Label();
-            this.btnRelayRefresh = new System.Windows.Forms.Button();
             this.btnRelayConnect = new System.Windows.Forms.Button();
             this.btnRelayDisconnect = new System.Windows.Forms.Button();
             this.tabMain.SuspendLayout();
@@ -99,7 +99,7 @@ namespace DX01_ShortCircuitTester
             this.tabTest.Name = "tabTest";
             this.tabTest.Size = new System.Drawing.Size(976, 688);
             this.tabTest.TabIndex = 0;
-            this.tabTest.Text = "測試";
+            this.tabTest.Text = "Test";
             this.tabTest.UseVisualStyleBackColor = true;
             //
             // tabDevice
@@ -111,7 +111,7 @@ namespace DX01_ShortCircuitTester
             this.tabDevice.Padding = new System.Windows.Forms.Padding(12);
             this.tabDevice.Size = new System.Drawing.Size(976, 688);
             this.tabDevice.TabIndex = 1;
-            this.tabDevice.Text = "設備設定";
+            this.tabDevice.Text = "Settings";
             this.tabDevice.UseVisualStyleBackColor = true;
             //
             // tableRoot
@@ -231,14 +231,18 @@ namespace DX01_ShortCircuitTester
             //
             // lblCurrentStep
             //
-            this.lblCurrentStep.Anchor = System.Windows.Forms.AnchorStyles.Left;
-            this.lblCurrentStep.AutoSize = true;
+            this.lblCurrentStep.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.lblCurrentStep.AutoEllipsis = true;
+            this.lblCurrentStep.AutoSize = false;
             this.lblCurrentStep.Font = new System.Drawing.Font("Microsoft JhengHei UI", 14F, System.Drawing.FontStyle.Bold);
-            this.lblCurrentStep.Location = new System.Drawing.Point(123, 17);
+            this.lblCurrentStep.Location = new System.Drawing.Point(123, 3);
             this.lblCurrentStep.Name = "lblCurrentStep";
-            this.lblCurrentStep.Size = new System.Drawing.Size(48, 25);
+            this.lblCurrentStep.Size = new System.Drawing.Size(421, 50);
             this.lblCurrentStep.TabIndex = 1;
             this.lblCurrentStep.Text = "待測";
+            this.lblCurrentStep.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // capRelay
             //
@@ -331,7 +335,7 @@ namespace DX01_ShortCircuitTester
             // colStep
             //
             this.colStep.FillWeight = 60F;
-            this.colStep.HeaderText = "步驟";
+            this.colStep.HeaderText = "Step";
             this.colStep.Name = "colStep";
             this.colStep.ReadOnly = true;
             //
@@ -380,23 +384,36 @@ namespace DX01_ShortCircuitTester
             // panelFooter
             //
             this.panelFooter.Controls.Add(this.lblInfo);
-            this.panelFooter.Controls.Add(this.lblConn);
+            this.panelFooter.Controls.Add(this.lblConnGdm);
+            this.panelFooter.Controls.Add(this.lblConnRelay);
             this.panelFooter.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelFooter.Location = new System.Drawing.Point(11, 685);
             this.panelFooter.Name = "panelFooter";
             this.panelFooter.Size = new System.Drawing.Size(954, 24);
             this.panelFooter.TabIndex = 3;
             //
-            // lblConn
+            // lblConnGdm
             //
-            this.lblConn.Dock = System.Windows.Forms.DockStyle.Right;
-            this.lblConn.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
-            this.lblConn.Location = new System.Drawing.Point(594, 0);
-            this.lblConn.Name = "lblConn";
-            this.lblConn.Size = new System.Drawing.Size(360, 24);
-            this.lblConn.TabIndex = 1;
-            this.lblConn.Text = "電表: 未連線    Relay: 未連線";
-            this.lblConn.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.lblConnGdm.AutoSize = true;
+            this.lblConnGdm.Dock = System.Windows.Forms.DockStyle.Right;
+            this.lblConnGdm.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
+            this.lblConnGdm.ForeColor = System.Drawing.Color.Red;
+            this.lblConnGdm.Name = "lblConnGdm";
+            this.lblConnGdm.Padding = new System.Windows.Forms.Padding(0, 0, 16, 0);
+            this.lblConnGdm.TabIndex = 1;
+            this.lblConnGdm.Text = "電表: 未連線";
+            this.lblConnGdm.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            //
+            // lblConnRelay
+            //
+            this.lblConnRelay.AutoSize = true;
+            this.lblConnRelay.Dock = System.Windows.Forms.DockStyle.Right;
+            this.lblConnRelay.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
+            this.lblConnRelay.ForeColor = System.Drawing.Color.Red;
+            this.lblConnRelay.Name = "lblConnRelay";
+            this.lblConnRelay.TabIndex = 2;
+            this.lblConnRelay.Text = "Relay: 未連線";
+            this.lblConnRelay.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             //
             // lblInfo
             //
@@ -431,7 +448,7 @@ namespace DX01_ShortCircuitTester
             this.gbGdm.Font = new System.Drawing.Font("Microsoft JhengHei UI", 11F);
             this.gbGdm.Location = new System.Drawing.Point(16, 16);
             this.gbGdm.Name = "gbGdm";
-            this.gbGdm.Size = new System.Drawing.Size(944, 170);
+            this.gbGdm.Size = new System.Drawing.Size(944, 210);
             this.gbGdm.TabIndex = 0;
             this.gbGdm.TabStop = false;
             this.gbGdm.Text = "GDM-8261A 電表 (RS-232 / USB 序列 / LAN)";
@@ -544,6 +561,7 @@ namespace DX01_ShortCircuitTester
             //
             this.btnGdmConnect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.btnGdmConnect.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(76)))), ((int)(((byte)(175)))), ((int)(((byte)(80)))));
+            this.btnGdmConnect.FlatAppearance.BorderSize = 0;
             this.btnGdmConnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnGdmConnect.ForeColor = System.Drawing.Color.White;
             this.btnGdmConnect.Location = new System.Drawing.Point(688, 50);
@@ -557,22 +575,26 @@ namespace DX01_ShortCircuitTester
             // btnGdmDisconnect
             //
             this.btnGdmDisconnect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnGdmDisconnect.BackColor = System.Drawing.SystemColors.Control;
+            this.btnGdmDisconnect.FlatAppearance.BorderSize = 0;
+            this.btnGdmDisconnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnGdmDisconnect.Location = new System.Drawing.Point(810, 50);
             this.btnGdmDisconnect.Name = "btnGdmDisconnect";
             this.btnGdmDisconnect.Size = new System.Drawing.Size(110, 44);
             this.btnGdmDisconnect.TabIndex = 8;
             this.btnGdmDisconnect.Text = "中斷連線";
-            this.btnGdmDisconnect.UseVisualStyleBackColor = true;
+            this.btnGdmDisconnect.UseVisualStyleBackColor = false;
             this.btnGdmDisconnect.Click += new System.EventHandler(this.btnGdmDisconnect_Click);
             //
             // lblGdmStatus
             //
-            this.lblGdmStatus.AutoSize = true;
-            this.lblGdmStatus.Font = new System.Drawing.Font("Microsoft JhengHei UI", 12F, System.Drawing.FontStyle.Bold);
-            this.lblGdmStatus.ForeColor = System.Drawing.Color.Firebrick;
-            this.lblGdmStatus.Location = new System.Drawing.Point(20, 134);
+            this.lblGdmStatus.AutoEllipsis = true;
+            this.lblGdmStatus.AutoSize = false;
+            this.lblGdmStatus.Font = new System.Drawing.Font("Microsoft JhengHei UI", 11F, System.Drawing.FontStyle.Bold);
+            this.lblGdmStatus.ForeColor = System.Drawing.Color.Red;
+            this.lblGdmStatus.Location = new System.Drawing.Point(20, 128);
             this.lblGdmStatus.Name = "lblGdmStatus";
-            this.lblGdmStatus.Size = new System.Drawing.Size(86, 21);
+            this.lblGdmStatus.Size = new System.Drawing.Size(910, 74);
             this.lblGdmStatus.TabIndex = 13;
             this.lblGdmStatus.Text = "● 未連線";
             //
@@ -584,17 +606,17 @@ namespace DX01_ShortCircuitTester
             this.lblGdmIdn.Name = "lblGdmIdn";
             this.lblGdmIdn.Size = new System.Drawing.Size(0, 19);
             this.lblGdmIdn.TabIndex = 14;
+            this.lblGdmIdn.Visible = false;
             //
             // gbRelay
             //
             this.gbRelay.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) | System.Windows.Forms.AnchorStyles.Right)));
             this.gbRelay.Controls.Add(this.lblRelayInfo);
             this.gbRelay.Controls.Add(this.lblRelayStatus);
-            this.gbRelay.Controls.Add(this.btnRelayRefresh);
             this.gbRelay.Controls.Add(this.btnRelayConnect);
             this.gbRelay.Controls.Add(this.btnRelayDisconnect);
             this.gbRelay.Font = new System.Drawing.Font("Microsoft JhengHei UI", 11F);
-            this.gbRelay.Location = new System.Drawing.Point(16, 200);
+            this.gbRelay.Location = new System.Drawing.Point(16, 240);
             this.gbRelay.Name = "gbRelay";
             this.gbRelay.Size = new System.Drawing.Size(944, 150);
             this.gbRelay.TabIndex = 1;
@@ -622,20 +644,11 @@ namespace DX01_ShortCircuitTester
             this.lblRelayStatus.TabIndex = 1;
             this.lblRelayStatus.Text = "● 未連線";
             //
-            // btnRelayRefresh
-            //
-            this.btnRelayRefresh.Location = new System.Drawing.Point(284, 74);
-            this.btnRelayRefresh.Name = "btnRelayRefresh";
-            this.btnRelayRefresh.Size = new System.Drawing.Size(100, 30);
-            this.btnRelayRefresh.TabIndex = 2;
-            this.btnRelayRefresh.Text = "重新偵測";
-            this.btnRelayRefresh.UseVisualStyleBackColor = true;
-            this.btnRelayRefresh.Click += new System.EventHandler(this.btnRelayRefresh_Click);
-            //
             // btnRelayConnect
             //
             this.btnRelayConnect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.btnRelayConnect.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(76)))), ((int)(((byte)(175)))), ((int)(((byte)(80)))));
+            this.btnRelayConnect.FlatAppearance.BorderSize = 0;
             this.btnRelayConnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnRelayConnect.ForeColor = System.Drawing.Color.White;
             this.btnRelayConnect.Location = new System.Drawing.Point(688, 70);
@@ -649,12 +662,15 @@ namespace DX01_ShortCircuitTester
             // btnRelayDisconnect
             //
             this.btnRelayDisconnect.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnRelayDisconnect.BackColor = System.Drawing.SystemColors.Control;
+            this.btnRelayDisconnect.FlatAppearance.BorderSize = 0;
+            this.btnRelayDisconnect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnRelayDisconnect.Location = new System.Drawing.Point(810, 70);
             this.btnRelayDisconnect.Name = "btnRelayDisconnect";
             this.btnRelayDisconnect.Size = new System.Drawing.Size(110, 44);
             this.btnRelayDisconnect.TabIndex = 4;
             this.btnRelayDisconnect.Text = "中斷連線";
-            this.btnRelayDisconnect.UseVisualStyleBackColor = true;
+            this.btnRelayDisconnect.UseVisualStyleBackColor = false;
             this.btnRelayDisconnect.Click += new System.EventHandler(this.btnRelayDisconnect_Click);
             //
             // MainForm
@@ -716,7 +732,8 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.DataGridViewTextBoxColumn colResult;
         private System.Windows.Forms.Panel panelFooter;
         private System.Windows.Forms.Label lblInfo;
-        private System.Windows.Forms.Label lblConn;
+        private System.Windows.Forms.Label lblConnGdm;
+        private System.Windows.Forms.Label lblConnRelay;
         private System.Windows.Forms.GroupBox gbGdm;
         private System.Windows.Forms.Label lblGdmPortCap;
         private System.Windows.Forms.ComboBox cbGdmPort;
@@ -736,7 +753,6 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.GroupBox gbRelay;
         private System.Windows.Forms.Label lblRelayInfo;
         private System.Windows.Forms.Label lblRelayStatus;
-        private System.Windows.Forms.Button btnRelayRefresh;
         private System.Windows.Forms.Button btnRelayConnect;
         private System.Windows.Forms.Button btnRelayDisconnect;
     }

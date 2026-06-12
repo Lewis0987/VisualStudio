@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DX01_ShortCircuitTester.Device;
@@ -40,6 +41,10 @@ namespace DX01_ShortCircuitTester.Services
         private readonly IRelayController _relay;
         private readonly IGdm8261AController _meter;
 
+        // 目前步驟（供設備異常時回報是哪一步出錯）
+        private int _currentStepNumber;
+        private string _currentStepName = "";
+
         public event EventHandler<StepStartedEventArgs> StepStarted;
         public event EventHandler<string> RelayChanged;
         public event EventHandler<MeasurementEventArgs> Measured;
@@ -70,19 +75,19 @@ namespace DX01_ShortCircuitTester.Services
 
             try
             {
-                // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位
-                RaiseStep(1, "初始化電表 (Relay=00, 電阻模式, Auto)");
+                // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位（Relay 由下方狀態欄顯示，標題不重複）
+                RaiseStep(1, "初始化電表");
                 _meter.Reset();
                 SwitchRelay("00");
                 _meter.SetMode(MeasurementMode.Resistance);
                 _meter.SetRangeAuto();
                 await Delay(Cfg.WaitMs(1), token);
-                AddInfoStep(result, 1, "初始化電表", "00", "電阻");
+                AddInfoStep(result, 1, "初始化電表", "00", "電阻", "OK");
 
-                // Step 2 掃描 Label，記錄序號（序號已由 UI 傳入）
-                RaiseStep(2, "掃描 Label，序號 = " + serialNumber);
+                // Step 2 掃描 Label，記錄序號（序號已由 UI 傳入；標題不附序號避免過長 / 多餘標點）
+                RaiseStep(2, "掃描 Label / 序號");
                 await Delay(Cfg.WaitMs(2), token);
-                AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-");
+                AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-", "OK");
 
                 // Step 3 外殼對機殼導通：Relay=00，R < 10Ω
                 if (!await MeasureStep(result, 3, "外殼對機殼導通", "00",
@@ -99,31 +104,31 @@ namespace DX01_ShortCircuitTester.Services
                         MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token))
                     return Finish(result);
 
-                // Step 6 切換電壓量測：DC Voltage、Range=100V
-                RaiseStep(6, "切換電壓量測 (DC Voltage, Range=100V)");
+                // Step 6 切換電壓量測：DC Voltage、Range=100V（無判定值，仍列入結果顯示）
+                RaiseStep(6, "切換電壓量測");
                 _meter.SetMode(MeasurementMode.DcVoltage);
                 _meter.SetRange("100");
                 await Delay(Cfg.WaitMs(6), token);
+                AddInfoStep(result, 6, "切換電壓量測", "-", "DC電壓", "OK");
 
-                // Step 7 電壓總值：Relay=11，V > 45V（Step7WaitMs 通常較長，待電壓穩定）
-                if (!await MeasureStep(result, 7, "電壓總值", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token))
-                    return Finish(result);
+                // 電壓步驟 Step7~Step10：任一 NG（含 Retry 後仍 NG）都不中止，依序跑完所有電壓步驟，
+                // 最終整體判定由 IsPass 處理（任一非資訊步驟 NG → FinalResult = NG）。
+
+                // Step 7 電壓總值：Relay=11，V > 45V；PASS 後再等待 Step7WaitMs（待電壓穩定）。
+                await MeasureStep(result, 7, "電壓總值", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token, Cfg.WaitMs(7));
 
                 // Step 8 P+ / P- 電壓：Relay=11，48V ~ 51V
-                if (!await MeasureStep(result, 8, "P+ / P- 電壓", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 8, "P+ / P- 電壓", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token);
 
                 // Step 9 P+ 對外殼電壓：Relay=01，V < 1V
-                if (!await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token);
 
                 // Step 10 P- 對外殼電壓：Relay=10，V < 1V
-                if (!await MeasureStep(result, 10, "P- 對外殼電壓", "10",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 10, "P- 對外殼電壓", "10",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token);
 
                 result.Completed = true;
             }
@@ -131,12 +136,23 @@ namespace DX01_ShortCircuitTester.Services
             {
                 result.Aborted = true;
             }
+            catch (Exception ex)
+            {
+                // 設備 / 網路異常：立即停止流程，記錄為 FAIL 步驟並標記異常（由 UI 顯示 Popup）。
+                string type = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
+                result.HasAnomaly = true;
+                result.AnomalyType = type;
+                result.AnomalyMessage = ex.Message;
+                result.AnomalyStep = _currentStepNumber;
+                result.AnomalyStepName = _currentStepName;
+                AddErrorStep(result, _currentStepNumber, _currentStepName, type, ex.Message);
+            }
 
             return Finish(result);
         }
 
-        /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。</summary>
-        private void AddInfoStep(TestResult result, int step, string name, string relayCode, string mode)
+        /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。judgement 可覆寫結果欄（如 Step6 顯示 OK）。</summary>
+        private void AddInfoStep(TestResult result, int step, string name, string relayCode, string mode, string judgement = null)
         {
             var stepResult = new TestStepResult
             {
@@ -146,48 +162,112 @@ namespace DX01_ShortCircuitTester.Services
                 Mode = mode,
                 IsInfo = true,
                 Pass = true,
+                IgnoreInOverall = true, // 資訊步驟（Step1/2/6）不參與 PASS / NG 判定
+                JudgementOverride = judgement,
                 Time = DateTime.Now
             };
             result.Steps.Add(stepResult);
             StepCompleted?.Invoke(this, stepResult);
         }
 
-        /// <summary>執行一個量測步驟並判定。回傳是否通過。等待時間依步驟由 AppSettings 控制。</summary>
+        /// <summary>記錄一個設備異常步驟（NG，計入 FAIL 並寫入 CSV / 通知 UI）。</summary>
+        private void AddErrorStep(TestResult result, int step, string name, string errorType, string errorMessage)
+        {
+            var stepResult = new TestStepResult
+            {
+                StepNumber = step,
+                StepName = string.IsNullOrEmpty(name) ? "設備異常" : name,
+                RelayCode = "-",
+                Mode = "-",
+                Pass = false,
+                ErrorType = errorType,
+                ErrorMessage = errorMessage,
+                Time = DateTime.Now
+            };
+            result.Steps.Add(stepResult);
+            StepCompleted?.Invoke(this, stepResult);
+        }
+
+        /// <summary>
+        /// 執行一個量測步驟並判定，內含 NG 自動複測（最多 3 次）。
+        /// 順序：① 切換 GDM 模式 ② 切換 Relay ③ 等待 RelaySwitchDelayMs ④ READ? ⑤ 判定。
+        /// 主表格只回報「一列」（整併後的最終結果，NG/PASS 後附加 (Retry N)），
+        /// 完整重試明細存於該列的 <see cref="TestStepResult.Attempts"/>，供 CSV / Debug Log / 內部紀錄。
+        /// postPassWaitMs：PASS 後再等待的時間（Step7 用 Step7WaitMs）。
+        /// </summary>
         private async Task<bool> MeasureStep(
             TestResult result, int step, string name, string relayCode,
             MeasurementMode mode, string unit, double? low, double? high,
-            CancellationToken token)
+            CancellationToken token, int postPassWaitMs = 0)
         {
-            RaiseStep(step, name + " (Relay=" + relayCode + ")");
+            const int maxAttempts = 3; // 第 1 次 + 最多 2 次複測（Retry 0 / 1 / 2）
+            string modeText = mode == MeasurementMode.Resistance ? "電阻" : "DC電壓";
 
-            SwitchRelay(relayCode);
-            await Delay(Cfg.RelaySwitchDelayMs, token); // 繼電器切換穩定時間
-            _meter.SetMode(mode);
-            await Delay(Cfg.WaitMs(step), token);       // 該步驟量測等待
+            var attempts = new List<TestStepResult>();
+            bool finalPass = false;
+            double finalValue = 0;
+            int finalIndex = 0;
 
-            double value = _meter.Read();
-            Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
+            for (int i = 0; i < maxAttempts; i++) // i = 0-based 嘗試索引（= Retry 編號）
+            {
+                // 標題只顯示 動作名稱（+Retry）；Relay 由下方「Relay 狀態」欄顯示，不放進標題避免過長
+                string desc = i == 0 ? name : name + " Retry " + i;
+                RaiseStep(step, desc);
 
-            bool pass = Evaluate(value, low, high);
+                _meter.SetMode(mode);                       // ① 切換 GDM 檔位 / 模式
+                SwitchRelay(relayCode);                     // ② 切換 Relay
+                await Delay(Cfg.RelaySwitchDelayMs, token); // ③ 等待繼電器穩定
+                double value = _meter.Read();               // ④ READ?
+                Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
+                bool pass = Evaluate(value, low, high);      // ⑤ 判定
 
-            var stepResult = new TestStepResult
+                attempts.Add(new TestStepResult
+                {
+                    StepNumber = step,
+                    StepName = name,
+                    RelayCode = relayCode,
+                    Mode = modeText,
+                    Value = value,
+                    Unit = unit,
+                    LowLimit = low,
+                    HighLimit = high,
+                    Pass = pass,
+                    Attempt = i,
+                    Time = DateTime.Now
+                });
+
+                finalPass = pass;
+                finalValue = value;
+                finalIndex = i;
+
+                if (pass)
+                    break;
+                // NG → 自動複測（迴圈），連續 maxAttempts 次才判 NG
+            }
+
+            // 整併為單一列：主表格只顯示一列；Attempts 保留完整重試明細。
+            var display = new TestStepResult
             {
                 StepNumber = step,
                 StepName = name,
                 RelayCode = relayCode,
-                Mode = mode == MeasurementMode.Resistance ? "電阻" : "DC電壓",
-                Value = value,
+                Mode = modeText,
+                Value = finalValue,
                 Unit = unit,
                 LowLimit = low,
                 HighLimit = high,
-                Pass = pass,
+                Pass = finalPass,
+                RetryCount = finalIndex, // 0=首次即定案；>0 顯示 (Retry N)
+                Attempts = attempts,
                 Time = DateTime.Now
             };
+            result.Steps.Add(display);
+            StepCompleted?.Invoke(this, display);
 
-            result.Steps.Add(stepResult);
-            StepCompleted?.Invoke(this, stepResult);
+            if (finalPass && postPassWaitMs > 0)
+                await Delay(postPassWaitMs, token); // PASS 後等待（Step7）
 
-            return pass;
+            return finalPass;
         }
 
         /// <summary>依上下限判定：兩者皆有=區間；只有上限=小於；只有下限=大於。</summary>
@@ -205,11 +285,17 @@ namespace DX01_ShortCircuitTester.Services
         private void SwitchRelay(string code)
         {
             _relay.SetRelay(code);
+            // 確認 Relay 切換成功：控制器於成功寫入後才更新 CurrentCode；不符即視為 Relay 異常。
+            if (_relay.CurrentCode != code)
+                throw new InvalidOperationException(
+                    "Relay 切換確認失敗（期望 " + code + "，實際 " + _relay.CurrentCode + "）。");
             RelayChanged?.Invoke(this, code);
         }
 
         private void RaiseStep(int step, string description)
         {
+            _currentStepNumber = step;
+            _currentStepName = description;
             StepStarted?.Invoke(this, new StepStartedEventArgs(step, description));
         }
 

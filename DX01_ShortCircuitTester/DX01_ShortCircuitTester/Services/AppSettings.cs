@@ -53,6 +53,17 @@ namespace DX01_ShortCircuitTester.Services
         public int ReadTimeoutMs = 5000;
         public int RelaySwitchDelayMs = 300;
 
+        // 8. LAN 重新連線參數
+        public int ConnectTimeoutMs = 3000;   // TCP 連線逾時
+        public int ReconnectDelayMs = 500;     // 每次重試前的等待
+        public int ReconnectRetryCount = 3;    // 重試次數
+
+        // 9. Debug Log 顯示上限（行數），超過移除最舊
+        public int MaxDebugLogLines = 2000;
+
+        // 10. GDM LAN 背景斷線偵測間隔（毫秒）
+        public int GdmMonitorIntervalMs = 1000;
+
         /// <summary>全域目前設定。</summary>
         public static AppSettings Current = new AppSettings();
 
@@ -109,6 +120,11 @@ namespace DX01_ShortCircuitTester.Services
                     s.PollIntervalMs = (int)Num(json, "PollIntervalMs", s.PollIntervalMs);
                     s.ReadTimeoutMs = (int)Num(json, "ReadTimeoutMs", s.ReadTimeoutMs);
                     s.RelaySwitchDelayMs = (int)Num(json, "RelaySwitchDelayMs", s.RelaySwitchDelayMs);
+                    s.ConnectTimeoutMs = (int)Num(json, "ConnectTimeoutMs", s.ConnectTimeoutMs);
+                    s.ReconnectDelayMs = (int)Num(json, "ReconnectDelayMs", s.ReconnectDelayMs);
+                    s.ReconnectRetryCount = (int)Num(json, "ReconnectRetryCount", s.ReconnectRetryCount);
+                    s.MaxDebugLogLines = (int)Num(json, "MaxDebugLogLines", s.MaxDebugLogLines);
+                    s.GdmMonitorIntervalMs = (int)Num(json, "GdmMonitorIntervalMs", s.GdmMonitorIntervalMs);
                 }
                 catch
                 {
@@ -170,6 +186,11 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("PollIntervalMs", PollIntervalMs.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("ReadTimeoutMs", ReadTimeoutMs.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("RelaySwitchDelayMs", RelaySwitchDelayMs.ToString(CultureInfo.InvariantCulture)));
+            p.Add(Line("ConnectTimeoutMs", ConnectTimeoutMs.ToString(CultureInfo.InvariantCulture)));
+            p.Add(Line("ReconnectDelayMs", ReconnectDelayMs.ToString(CultureInfo.InvariantCulture)));
+            p.Add(Line("ReconnectRetryCount", ReconnectRetryCount.ToString(CultureInfo.InvariantCulture)));
+            p.Add(Line("MaxDebugLogLines", MaxDebugLogLines.ToString(CultureInfo.InvariantCulture)));
+            p.Add(Line("GdmMonitorIntervalMs", GdmMonitorIntervalMs.ToString(CultureInfo.InvariantCulture)));
 
             return "{" + Environment.NewLine + string.Join("," + Environment.NewLine, p) + Environment.NewLine + "}" + Environment.NewLine;
         }
