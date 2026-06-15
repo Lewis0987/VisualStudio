@@ -12,6 +12,7 @@ namespace DX01_ShortCircuitTester.Models
         public string StepName { get; set; }
         public string RelayCode { get; set; }
         public string Mode { get; set; }
+        public string Range { get; set; }
         public double Value { get; set; }
         public string Unit { get; set; }
         public double? LowLimit { get; set; }

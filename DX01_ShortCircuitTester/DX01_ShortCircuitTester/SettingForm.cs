@@ -21,7 +21,7 @@ namespace DX01_ShortCircuitTester
         // 3. 電阻
         private TextBox txtIRUpper, txtOLValue;
         // 4. 電壓
-        private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper;
+        private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper, txtDcVoltageRange;
         // 5. 電流
         private TextBox txtCurrentMin, txtCurrentMax;
         // 6. Step 等待
@@ -81,6 +81,7 @@ namespace DX01_ShortCircuitTester
             txtVoltLower = TxtRow("VoltLower(V)  → step8 min");
             txtVoltOn = TxtRow("VoltOn(V)  → step7 min");
             txtVoltIsoUpper = TxtRow("VoltIsoUpper(V)  → step9/10");
+            txtDcVoltageRange = TxtRow("DC Voltage Range(V)");
 
             Header("5. 電流條件 (保留)");
             txtCurrentMin = TxtRow("CurrentMin(A)");
@@ -152,6 +153,7 @@ namespace DX01_ShortCircuitTester
             txtVoltLower.Text = Dbl(c.Step8PPlusMinusMin);
             txtVoltOn.Text = Dbl(c.Step7TotalVoltageMin);
             txtVoltIsoUpper.Text = Dbl(c.Step9PPlusToCaseMax);
+            txtDcVoltageRange.Text = Dbl(c.DcVoltageRange);
 
             txtCurrentMin.Text = Dbl(c.CurrentMin);
             txtCurrentMax.Text = Dbl(c.CurrentMax);
@@ -219,7 +221,7 @@ namespace DX01_ShortCircuitTester
               .Append(cbDebugLevel.SelectedItem).Append('|').Append(txtBarcodeRegex.Text).Append('|')
               .Append(txtIRUpper.Text).Append('|').Append(txtOLValue.Text).Append('|')
               .Append(txtVoltUpper.Text).Append('|').Append(txtVoltLower.Text).Append('|')
-              .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|')
+              .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|').Append(txtDcVoltageRange.Text).Append('|')
               .Append(txtCurrentMin.Text).Append('|').Append(txtCurrentMax.Text).Append('|');
             for (int i = 1; i <= 10; i++)
                 sb.Append(_stepBoxes[i].Text).Append('|');
@@ -240,6 +242,8 @@ namespace DX01_ShortCircuitTester
             if (!PD(txtVoltLower, "VoltLower", out voltLower, ref err)) return false;
             if (!PD(txtVoltOn, "VoltOn", out voltOn, ref err)) return false;
             if (!PD(txtVoltIsoUpper, "VoltIsoUpper", out voltIso, ref err)) return false;
+            double dcRange;
+            if (!PD(txtDcVoltageRange, "DC Voltage Range", out dcRange, ref err)) return false;
             if (!PD(txtCurrentMin, "CurrentMin", out curMin, ref err)) return false;
             if (!PD(txtCurrentMax, "CurrentMax", out curMax, ref err)) return false;
 
@@ -280,6 +284,7 @@ namespace DX01_ShortCircuitTester
             c.Step8PPlusMinusMax = voltUpper;
             c.Step9PPlusToCaseMax = voltIso;
             c.Step10PMinusToCaseMax = voltIso;
+            c.DcVoltageRange = dcRange;
 
             c.CurrentMin = curMin;
             c.CurrentMax = curMax;

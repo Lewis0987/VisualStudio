@@ -849,8 +849,15 @@ namespace DX01_ShortCircuitTester
 
         private void Flow_StepStarted(object sender, StepStartedEventArgs e)
         {
-            lblCurrentStep.Text = "Step " + e.StepNumber + " — " + e.Description;
+            // 目前步驟區：只顯示正式步驟名稱（去掉 " Retry N" 與 Range，避免過長換行）
+            string baseName = e.Description;
+            int retryIdx = baseName.IndexOf(" Retry ", StringComparison.Ordinal);
+            if (retryIdx >= 0)
+                baseName = baseName.Substring(0, retryIdx);
+            lblCurrentStep.Text = "Step " + e.StepNumber + " — " + baseName;
+
             lblInfo.Text = "執行中… Step " + e.StepNumber;
+            // Debug Log 保留完整資訊（含 Retry）
             if (_debugLog != null)
                 _debugLog.Write(LogKind.Info, "Step " + e.StepNumber + " — " + e.Description);
         }
@@ -873,6 +880,7 @@ namespace DX01_ShortCircuitTester
                 e.StepName,
                 e.RelayCode,
                 e.Mode,
+                e.Range,
                 e.ValueText,
                 e.LimitText,
                 e.Judgement);

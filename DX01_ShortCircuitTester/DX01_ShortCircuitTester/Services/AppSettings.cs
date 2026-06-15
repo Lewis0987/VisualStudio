@@ -38,6 +38,7 @@ namespace DX01_ShortCircuitTester.Services
         public double Step8PPlusMinusMax = 51;      // VoltUpper
         public double Step9PPlusToCaseMax = 1;      // VoltIsoUpper
         public double Step10PMinusToCaseMax = 1;    // VoltIsoUpper
+        public double DcVoltageRange = 100;         // GDM DC 電壓檔位 (CONF:VOLT:DC <range>)
 
         // 5. 電流條件（流程未使用，保留）
         public double CurrentMin = 0;
@@ -107,6 +108,7 @@ namespace DX01_ShortCircuitTester.Services
                     s.Step8PPlusMinusMax = Num(json, "step8_pPlusMinusVoltage_max", s.Step8PPlusMinusMax);
                     s.Step9PPlusToCaseMax = Num(json, "step9_pPlusToCaseVoltage_max", s.Step9PPlusToCaseMax);
                     s.Step10PMinusToCaseMax = Num(json, "step10_pMinusToCaseVoltage_max", s.Step10PMinusToCaseMax);
+                    s.DcVoltageRange = Num(json, "DcVoltageRange", s.DcVoltageRange); // 遺失=預設 100
 
                     s.CurrentMin = Num(json, "current_min", s.CurrentMin);
                     s.CurrentMax = Num(json, "current_max", s.CurrentMax);
@@ -177,6 +179,7 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("step8_pPlusMinusVoltage_max", Dbl(Step8PPlusMinusMax)));
             p.Add(Line("step9_pPlusToCaseVoltage_max", Dbl(Step9PPlusToCaseMax)));
             p.Add(Line("step10_pMinusToCaseVoltage_max", Dbl(Step10PMinusToCaseMax)));
+            p.Add(Line("DcVoltageRange", Dbl(DcVoltageRange)));
             p.Add(Line("current_min", Dbl(CurrentMin)));
             p.Add(Line("current_max", Dbl(CurrentMax)));
             for (int i = 1; i <= 10; i++)

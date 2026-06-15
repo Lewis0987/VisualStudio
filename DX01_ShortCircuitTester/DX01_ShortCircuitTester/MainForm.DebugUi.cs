@@ -42,6 +42,7 @@ namespace DX01_ShortCircuitTester
             _debugLog.Entry += OnLogEntry;
             if (_meter != null) _meter.Log = _debugLog;
             if (_relay != null) _relay.Log = _debugLog;
+            if (_flow != null) _flow.Log = _debugLog;
 
             // ===== Debug Log 分頁 =====
             tabLog = new TabPage("Debug Log");
