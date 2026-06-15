@@ -1,0 +1,14 @@
+//語言對照表
+   C# WinForms語言                        #Python PyQt語言
+     using                                import
+     namespace                            通常不用
+     class SettingForm : Form             class SettingForm(QWidget)
+     TextBox                              QLineEdit
+     ComboBox                             QComboBox
+     Label                                QLabel
+     Button                               QPushButton
+     CheckBox                             QCheckBox
+     TabControl                           QTabWidget
+     DataGridView                         QTableWidget
+     Form.Show()                          form.show()
+     Application.Run()                    app.exec_()

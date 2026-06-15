@@ -351,6 +351,14 @@ namespace DX01_ShortCircuitTester.Services
 
         private TestResult Finish(TestResult result)
         {
+            // 測試結束（Step11/12）復位 Relay = 00，回到安全狀態；UI 透過 RelayChanged 同步顯示 00
+            try
+            {
+                if (_relay.IsConnected && _relay.CurrentCode != "00")
+                    SwitchRelay("00");
+            }
+            catch { /* 設備已斷線等情況忽略 */ }
+
             result.EndTime = DateTime.Now;
             RaiseStatus(result.Aborted ? "已中止" : (result.IsPass ? "測試完成：OK" : "測試完成：NG"));
             return result;

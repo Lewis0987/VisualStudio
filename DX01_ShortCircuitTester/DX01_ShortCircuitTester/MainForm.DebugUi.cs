@@ -308,13 +308,11 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "=== 設備測試 (Relay 循環) 開始 ===");
                 foreach (string code in codes)
                 {
-                    _relay.SetRelay(code);
+                    _relay.SetRelay(code); // RelayChanged 事件會同步更新 lblRelay
                     lblDevTestResult.Text = "Relay 目前狀態: " + code;
-                    lblRelay.Text = code;
-                    lblRelay.ForeColor = Color.MediumBlue;
                     await Task.Delay(700);
                 }
-                _relay.SetRelay("00");
+                _relay.SetRelay("00"); // 復位 00，UI 同步顯示 00
                 lblDevTestResult.Text = "Relay 循環完成，已復位 00";
                 _debugLog.Write(LogKind.Info, "=== 設備測試完成 ===");
             }

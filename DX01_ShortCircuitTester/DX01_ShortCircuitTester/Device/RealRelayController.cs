@@ -28,6 +28,9 @@ namespace DX01_ShortCircuitTester.Device
         /// <summary>除錯日誌（可為 null）。</summary>
         public DebugLog Log { get; set; }
 
+        /// <summary>每次 SetRelay 後觸發（參數為目前代碼），供 UI 同步顯示。</summary>
+        public event EventHandler<string> RelayChanged;
+
         public bool IsConnected
         {
             get { return _stream != null; }
@@ -96,6 +99,10 @@ namespace DX01_ShortCircuitTester.Device
 
             CurrentCode = code;
             WriteLog(LogKind.Relay, "Relay " + code);
+
+            // 任何 Relay 切換都通知 UI 同步（含連線復位、設備測試、流程切換）
+            var handler = RelayChanged;
+            if (handler != null) handler(this, code);
         }
 
         private void SetChannel(int channel, bool on)

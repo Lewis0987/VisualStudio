@@ -5,9 +5,11 @@ using System.IO.Ports;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using System.ComponentModel;
 using DX01_ShortCircuitTester.Device;
 using DX01_ShortCircuitTester.Models;
 using DX01_ShortCircuitTester.Services;
+
 
 namespace DX01_ShortCircuitTester
 {
@@ -75,6 +77,9 @@ namespace DX01_ShortCircuitTester
 
         private void MainForm_Load(object sender, EventArgs e)
         {
+            if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
+                return;
+
             AppSettings.Load();
 
             // 鮑率選項
@@ -87,8 +92,14 @@ namespace DX01_ShortCircuitTester
             SetRunningState(false);
             SetResult("待測", Color.DimGray, Color.Gainsboro);
 
+            BuildBarcodeArea();
             txtBarcode.KeyDown += TxtBarcode_KeyDown;
-            txtBarcode.Enter += (s, ev) => txtBarcode.SelectAll(); // 取得焦點時全選，方便覆蓋
+            txtBarcode.Enter += (s, ev) => txtBarcode.SelectAll();
+            txtBarcode.TextChanged += (s, ev) => { if (_barcodeError) SetBarcodeError(false); else UpdateBarcodeHint(); };
+
+            // 自動聚焦：啟動完成、切回 Test 頁
+            this.Shown += (s, ev) => FocusBarcode();
+            tabMain.SelectedIndexChanged += (s, ev) => { if (tabMain.SelectedTab == tabTest) FocusBarcode(); };
 
             _okMsgTimer = new System.Windows.Forms.Timer { Interval = Math.Max(1, AppSettings.Current.PopupSeconds) * 1000 };
             _okMsgTimer.Tick += (s, ev) => { _okMsgTimer.Stop(); lblBarcodeMsg.Text = ""; };
@@ -186,11 +197,119 @@ namespace DX01_ShortCircuitTester
             }
         }
 
+        // ===== 條碼欄位：自訂 Placeholder（小字/淡灰）+ 錯誤紅框 + 下方錯誤訊息 =====
+        private const string BarcodePlaceholderText = "Please enter the barcode.";
+        private static readonly Color BarcodePlaceholderColor = Color.DimGray;  // 深灰，易閱讀
+        private static readonly Color BarcodeBorderNormal = Color.White;  // 正常邊框=白(不可見)，錯誤=紅
+        private Panel _barcodeBox;             // 輸入框外框（BackColor 當邊框：正常白 / 錯誤紅）
+        private bool _barcodeError;            // 是否為格式錯誤狀態
+
+        /// <summary>重組條碼區：caption | [輸入框(可紅框) + 下方錯誤訊息]。</summary>
+        private void BuildBarcodeArea()
+        {
+            panelTop.SuspendLayout();
+            panelTop.Controls.Clear();
+            panelTop.ColumnStyles.Clear();
+            panelTop.RowStyles.Clear();
+
+            // 先設定輸入框，取得實際高度（內層恰好等於文字高，避免底色外露 / 邊框不完整）
+            txtBarcode.BorderStyle = BorderStyle.None;
+            txtBarcode.BackColor = Color.White;
+            txtBarcode.Dock = DockStyle.Fill;
+            txtBarcode.Margin = Padding.Empty;
+            int boxH = txtBarcode.PreferredHeight + 4;          // 上下各 2px 邊框
+
+            panelTop.ColumnCount = 2;
+            panelTop.RowCount = 2;
+            panelTop.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));          // 標題
+            panelTop.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));     // 輸入框
+            panelTop.RowStyles.Add(new RowStyle(SizeType.Absolute, boxH));          // 第0列：標題 + 輸入框
+            panelTop.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));           // 第1列：提示 / 錯誤（緊鄰輸入框下方）
+
+            // 標題固定於第 0 列、垂直置中
+            lblBarcodeCaption.AutoSize = true;
+            lblBarcodeCaption.Anchor = AnchorStyles.Left;
+            panelTop.Controls.Add(lblBarcodeCaption, 0, 0);
+
+            // 輸入框外框（BackColor 當邊框）：Dock=Fill + Margin 0 + Padding 2 → 四邊 2px 完整（含右側）
+            _barcodeBox = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0),
+                Padding = new Padding(2),
+                BackColor = BarcodeBorderNormal
+            };
+            _barcodeBox.Controls.Add(txtBarcode);
+            panelTop.Controls.Add(_barcodeBox, 1, 0);
+
+            // 提示 / 錯誤：第 1 列、靠左對齊輸入框、緊鄰下方（上邊距約 3px）
+            lblBarcodeMsg.AutoSize = false;
+            lblBarcodeMsg.Dock = DockStyle.Fill;
+            lblBarcodeMsg.TextAlign = ContentAlignment.TopLeft;
+            lblBarcodeMsg.Padding = new Padding(1, 3, 0, 0);    // 左對齊框邊、距輸入框約 3px
+            lblBarcodeMsg.BackColor = Color.Transparent;
+            lblBarcodeMsg.Font = new Font("Microsoft JhengHei UI", 8.25F);
+            lblBarcodeMsg.Text = "";
+            lblBarcodeMsg.Visible = false;
+            panelTop.Controls.Add(lblBarcodeMsg, 1, 1);
+
+            panelTop.ResumeLayout();
+
+            UpdateBarcodeHint();
+        }
+
+        /// <summary>
+        /// 更新輸入框下方提示（優先序：錯誤 &gt; placeholder &gt; 無）。
+        /// 不疊在 TextBox 內，故不影響游標顯示。
+        /// </summary>
+        private void UpdateBarcodeHint()
+        {
+            if (_barcodeError)
+            {
+                lblBarcodeMsg.Text = "Barcode format invalid.";
+                lblBarcodeMsg.ForeColor = Color.Red;
+                lblBarcodeMsg.Visible = true;
+            }
+            else if (txtBarcode.Text.Length == 0)
+            {
+                lblBarcodeMsg.Text = BarcodePlaceholderText;        // Please enter the barcode.
+                lblBarcodeMsg.ForeColor = BarcodePlaceholderColor;  // LightGray
+                lblBarcodeMsg.Visible = true;
+            }
+            else
+            {
+                lblBarcodeMsg.Text = "";
+                lblBarcodeMsg.Visible = false;
+            }
+        }
+
+        /// <summary>聚焦條碼輸入框（方便直接掃下一顆）。</summary>
+        private void FocusBarcode()
+        {
+            if (txtBarcode != null && txtBarcode.CanFocus)
+            {
+                txtBarcode.Focus();
+                txtBarcode.SelectAll();
+            }
+        }
+
+        /// <summary>格式錯誤 → 紅框 + 下方紅字訊息；false → 還原正常樣式並隱藏訊息。</summary>
+        private void SetBarcodeError(bool on)
+        {
+            _barcodeError = on;
+            if (_barcodeBox != null)
+                _barcodeBox.BackColor = on ? Color.Red : BarcodeBorderNormal;  // 1px 紅框 / 還原白框
+            UpdateBarcodeHint();
+        }
+
         /// <summary>建立真實設備控制器與測試流程。</summary>
         private void InitDevices()
         {
             _relay = new RealRelayController();
             _meter = new RealGdm8261AController();
+
+            // 集中：任何 Relay 切換（連線復位 / 設備測試 / 流程）都同步更新 UI
+            _relay.RelayChanged += OnRelayChanged;
 
             _flow = new DX01TestFlow(_relay, _meter);
             _flow.StepStarted += Flow_StepStarted;
@@ -576,6 +695,13 @@ namespace DX01_ShortCircuitTester
 
             string sn = txtBarcode.Text.Trim();
 
+            // 空白：不開始測試（placeholder 已提示）
+            if (sn.Length == 0)
+            {
+                SetBarcodeError(false);
+                return;
+            }
+
             // 條碼/序號規則檢查（Config: barcodeRegex，空字串=不檢查）
             string pattern = AppSettings.Current.BarcodeRegex;
             if (!string.IsNullOrEmpty(pattern))
@@ -586,20 +712,12 @@ namespace DX01_ShortCircuitTester
 
                 if (!match)
                 {
-                    // 條碼格式錯誤：使用與「重覆測試確認」一致的原生 MessageBox（左側圖示 / 文字靠左 / 下方按鈕）。
-                    ShowBarcodeMsg("✕ 條碼格式錯誤", Color.Firebrick, false);
-                    MessageBox.Show(this,
-                        "條碼/序號不符合規則。\n\n規則: " + pattern + "\n輸入: " + (sn.Length == 0 ? "(空白)" : sn),
-                        "條碼格式錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    ClearBarcodeMsg();   // 按確定後：清除右上角錯誤訊息與錯誤狀態
-                    txtBarcode.Focus();  // 游標回到條碼/序號輸入框
+                    // 格式錯誤：輸入框紅框 + 框下方紅字「Barcode format invalid.」（不跳 Popup）
+                    SetBarcodeError(true);
+                    txtBarcode.Focus();
+                    txtBarcode.SelectAll();
                     return; // 不執行測試
                 }
-            }
-            else if (sn.Length == 0)
-            {
-                ShowBarcodeMsg("✕ 請輸入序號", Color.Firebrick, false);
-                return;
             }
 
             // 重覆條碼確認：若此條碼先前已完成測試，先詢問是否重測
@@ -618,8 +736,8 @@ namespace DX01_ShortCircuitTester
                 }
             }
 
-            // 符合 → 顯示 OK（1 秒後消失）並自動進入測試流程
-            ShowBarcodeMsg("✓ OK", OkGreen, true);
+            // 符合格式 → 還原正常樣式並自動進入測試流程
+            SetBarcodeError(false);
             StartTest(sn);
         }
 
@@ -864,13 +982,30 @@ namespace DX01_ShortCircuitTester
 
         private void Flow_RelayChanged(object sender, string code)
         {
+            UpdateRelayDisplay(code);
+        }
+
+        /// <summary>Relay 控制器事件（任何 SetRelay 都會觸發）；可能在背景執行緒，需 Invoke。</summary>
+        private void OnRelayChanged(object sender, string code)
+        {
+            UpdateRelayDisplay(code);
+        }
+
+        /// <summary>同步 Test 頁「Relay 狀態」顯示（執行緒安全）。</summary>
+        private void UpdateRelayDisplay(string code)
+        {
+            if (lblRelay.InvokeRequired)
+            {
+                lblRelay.BeginInvoke(new Action(() => UpdateRelayDisplay(code)));
+                return;
+            }
             lblRelay.Text = code;
             lblRelay.ForeColor = Color.MediumBlue;
         }
 
         private void Flow_Measured(object sender, MeasurementEventArgs e)
         {
-            lblMeasure.Text = TestStepResult.FormatValue(e.Value, e.Unit);
+            lblMeasure.Text = TestStepResult.FormatMeasureValue(e.Value, e.Unit);
         }
 
         private void Flow_StepCompleted(object sender, TestStepResult e)

@@ -44,10 +44,10 @@ namespace DX01_ShortCircuitTester.Models
         /// <summary>設備異常訊息；正常步驟為 null。</summary>
         public string ErrorMessage { get; set; }
 
-        /// <summary>量測值的易讀字串（自動換算 kΩ / MΩ）。</summary>
+        /// <summary>量測值的 UI 顯示字串（精簡、≤約 10 碼；不影響判定與 CSV 原始值）。</summary>
         public string ValueText
         {
-            get { return IsInfo ? "—" : FormatValue(Value, Unit); }
+            get { return IsInfo ? "—" : FormatMeasureValue(Value, Unit); }
         }
 
         /// <summary>判定條件文字，例如 "&lt; 10 Ω"、"48 ~ 51 V"。</summary>
@@ -80,6 +80,31 @@ namespace DX01_ShortCircuitTester.Models
                     r += " (Retry " + RetryCount + ")";
                 return r;
             }
+        }
+
+        /// <summary>
+        /// UI 量測值精簡顯示（僅供畫面，不用於判定 / CSV 原始值）。
+        /// 規則：溢位=OL；|值|&gt;=1e6 或 &lt;1e-3 用科學記號；其餘最多 4 位小數。字串長度盡量 ≤ 10 碼。
+        /// </summary>
+        public static string FormatMeasureValue(double value, string unit)
+        {
+            double abs = Math.Abs(value);
+
+            // 溢位 / 無效 / 超大電阻 → OL
+            if (double.IsNaN(value) || double.IsInfinity(value) || abs >= 9.9e37)
+                return "OL " + unit;
+
+            if (unit == "Ω")
+            {
+                // 電阻：工程單位顯示；>= 1TΩ 視為開路 (OL)
+                if (abs >= 1e12) return "OL Ω";
+                if (abs >= 1e6) return (value / 1e6).ToString("0.###", CultureInfo.InvariantCulture) + " MΩ";
+                if (abs >= 1e3) return (value / 1e3).ToString("0.###", CultureInfo.InvariantCulture) + " kΩ";
+                return value.ToString("0.###", CultureInfo.InvariantCulture) + " Ω";
+            }
+
+            // 電壓等：一般數值、固定 4 位小數，不使用科學記號（例 0.0001 / 0.0030 / 50.1235）
+            return value.ToString("0.0000", CultureInfo.InvariantCulture) + " " + unit;
         }
 
         public static string FormatValue(double value, string unit)

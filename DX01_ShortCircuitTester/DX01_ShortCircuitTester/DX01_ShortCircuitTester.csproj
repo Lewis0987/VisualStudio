@@ -1,18 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- DX01 外殼短路流程測試 — .NET Framework 4.8 WinForms -->
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-    <RootNamespace>DX01_ShortCircuitTester</RootNamespace>
-    <AssemblyName>DX01_ShortCircuitTester</AssemblyName>
-    <LangVersion>7.3</LangVersion>
-  </PropertyGroup>
+	<!-- DX01 外殼短路流程測試 — .NET Framework 4.8 WinForms -->
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<UseWindowsForms>true</UseWindowsForms>
+		<RootNamespace>DX01_ShortCircuitTester</RootNamespace>
+		<AssemblyName>DX01_ShortCircuitTester</AssemblyName>
+		<LangVersion>7.3</LangVersion>
+	</PropertyGroup>
 
-  <!-- Relay Board (USBRelay2) 走 USB HID，沿用 UsbRelayWinForms 的相依套件 -->
-  <ItemGroup>
-    <PackageReference Include="HidSharp" Version="2.1.0" />
-  </ItemGroup>
+	<!-- Relay Board (USBRelay2) -->
+	<ItemGroup>
+		<PackageReference Include="HidSharp" Version="2.1.0" />
+	</ItemGroup>
 
+	<!-- 設計UI加在這裡 -->
+	<ItemGroup>
+		<Compile Update="MainForm.cs">
+			<SubType>Form</SubType>
+		</Compile>
+
+		<Compile Update="MainForm.Designer.cs">
+			<DependentUpon>MainForm.cs</DependentUpon>
+		</Compile>
+
+		<Compile Update="SettingForm.cs">
+			<SubType>Form</SubType>
+		</Compile>
+
+		<Compile Update="SettingForm.Designer.cs">
+			<DependentUpon>SettingForm.cs</DependentUpon>
+		</Compile>
+	</ItemGroup>
 </Project>
