@@ -246,9 +246,19 @@ namespace GDM8261A_Tester
             };
             gbLog.Controls.Add(txtLog);
 
-            var btnClear = new Button { Text = "清除紀錄", Location = new Point(849, 264), Size = new Size(100, 28), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
-            btnClear.Click += (s, e) => txtLog.Clear();
+            // 清除紀錄：置於「通訊紀錄」區塊右上角空白處
+            var btnClear = new Button { Text = "清除紀錄", Location = new Point(844, 0), Size = new Size(105, 22), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            btnClear.Click += (s, e) =>
+            {
+                // 僅清除畫面上的通訊紀錄；不影響 LAN/USB Relay 連線、量測設定與測試結果
+                if (MessageBox.Show(this, "確定要清除所有通訊紀錄？", "清除紀錄",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    txtLog.Clear();
+                }
+            };
             gbLog.Controls.Add(btnClear);
+            btnClear.BringToFront();
         }
 
         private void RefreshPorts()
@@ -328,16 +338,58 @@ namespace GDM8261A_Tester
                 btnConnect.Enabled = false;
                 Log("SYS", "開啟連線: " + _transport.Description);
 
-                await Task.Run(() => _transport.Open());
+                // 整個連線流程（TryOpen + *IDN? 驗證）都不丟例外，
+                // 失敗回傳錯誤訊息，避免偵錯器停在 throw、也不會跳到 VS 程式碼。
+                var connect = await Task.Run<(bool ok, string idn, string error)>(() =>
+                {
+                    if (!_transport.TryOpen(out string openError))
+                        return (false, null, openError);
 
-                string idn = await QueryAsync("*IDN?");
-                lblIdn.Text = "儀器識別: " + idn;
+                    // 不允許假連線：必須成功送出並收到 *IDN? 回覆，才算連線成功
+                    try
+                    {
+                        _transport.WriteLine("*IDN?");
+                        string reply = _transport.ReadLine();
+                        if (string.IsNullOrWhiteSpace(reply))
+                            return (false, null, "*IDN? 無回應，無法確認連線。");
+
+                        return (true, reply, null);
+                    }
+                    catch (Exception ex)
+                    {
+                        return (false, null, ex.Message);
+                    }
+                });
+
+                if (!connect.ok)
+                {
+                    Log("ERR", "連線失敗: " + connect.error);
+
+                    _transport?.Dispose();
+                    _transport = null;
+
+                    UpdateConnectionUi(false);
+
+                    // LAN 失敗用 DX01 風格的友善錯誤視窗；序列埠維持一般訊息
+                    if (rbLan.Checked)
+                        ShowLanError(connect.error);
+                    else
+                        MessageBox.Show(this, "連線失敗:\n" + connect.error, "錯誤",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                    return;
+                }
+
+                Log("→", "*IDN?");
+                Log("←", connect.idn);
+                lblIdn.Text = "儀器識別: " + connect.idn;
 
                 UpdateConnectionUi(true);
                 Log("SYS", "連線成功");
             }
             catch (Exception ex)
             {
+                // 非預期例外的最後防線（理論上不會走到，連線失敗都走 connect.ok 分支）
                 Log("ERR", "連線失敗: " + ex.Message);
 
                 _transport?.Dispose();
@@ -345,12 +397,29 @@ namespace GDM8261A_Tester
 
                 UpdateConnectionUi(false);
 
-                MessageBox.Show(
-                    "連線失敗:\n" + ex.Message,
-                    "錯誤",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                if (rbLan.Checked)
+                    ShowLanError(ex.Message);
+                else
+                    MessageBox.Show(this, "連線失敗:\n" + ex.Message, "錯誤",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        /// <summary>LAN 連線失敗的 DX01 風格錯誤視窗（友善排查指引 + 詳細錯誤）。</summary>
+        private void ShowLanError(string detail)
+        {
+            MessageBox.Show(
+                this,
+                "無法連線至 GDM-8261A。\n\n" +
+                "請確認：\n" +
+                "1. LAN 線是否已接妥\n" +
+                "2. IP / Port 是否正確\n" +
+                "3. 電表 LAN 功能是否啟用\n" +
+                "4. 等待 3 秒後再試一次\n\n" +
+                "詳細錯誤：\n" + detail,
+                "GDM LAN 連線失敗",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private async Task DisconnectAsync()
@@ -648,7 +717,7 @@ namespace GDM8261A_Tester
             }
             catch (Exception ex)
             {
-                Log("ERR", cmd + " 寫入失敗: " + ex.Message);
+                DropConnection(cmd + " 寫入", ex);
                 return false;
             }
             finally
@@ -692,7 +761,7 @@ namespace GDM8261A_Tester
             }
             catch (Exception ex)
             {
-                Log("ERR", cmd + " 查詢失敗: " + ex.Message);
+                DropConnection(cmd + " 查詢", ex);
                 return null;
             }
             finally
@@ -710,6 +779,34 @@ namespace GDM8261A_Tester
 
             Log("ERR", "尚未連線");
             return false;
+        }
+
+        /// <summary>
+        /// 任一階段 I/O 失敗時呼叫：立即釋放連線、停止連續讀取、UI 改為未連線，
+        /// 並記錄一次錯誤 + 跳出錯誤訊息（已斷線則不重複處理，避免洗版 / 重複跳窗）。
+        /// </summary>
+        private void DropConnection(string context, Exception ex)
+        {
+            if (_transport == null)
+                return; // 已斷線，避免重複
+
+            Log("ERR", context + " 失敗: " + ex.Message);
+
+            StopPolling();
+
+            IGdmTransport transport = _transport;
+            _transport = null;
+            try { transport.Dispose(); }
+            catch { }
+
+            UpdateConnectionUi(false);
+
+            MessageBox.Show(
+                this,
+                "通訊失敗，連線已中斷:\n" + ex.Message,
+                "錯誤",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         private void Log(string tag, string msg)

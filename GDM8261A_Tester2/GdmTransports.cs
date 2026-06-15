@@ -16,6 +16,13 @@ namespace GDM8261A_Tester
         string Description { get; }
 
         void Open();
+
+        /// <summary>
+        /// 嘗試開啟連線，失敗時不丟例外，改回傳 false 並輸出錯誤訊息。
+        /// 供 UI 使用，避免偵錯器在 throw 處中斷。
+        /// </summary>
+        bool TryOpen(out string errorMessage);
+
         void Close();
         void WriteLine(string command);
         string ReadLine();
@@ -49,6 +56,22 @@ namespace GDM8261A_Tester
             _port.Open();
             _port.DiscardInBuffer();
             _port.DiscardOutBuffer();
+        }
+
+        public bool TryOpen(out string errorMessage)
+        {
+            errorMessage = "";
+            try
+            {
+                Open();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Close();
+                errorMessage = ex.Message;
+                return false;
+            }
         }
 
         public void Close()
@@ -97,20 +120,65 @@ namespace GDM8261A_Tester
 
         public void Open()
         {
+            Close(); // 先清掉任何舊連線，避免殘留 TcpClient / Stream
+
             _client = new TcpClient();
 
             var result = _client.BeginConnect(_host, _port, null, null);
             if (!result.AsyncWaitHandle.WaitOne(3000))
             {
-                _client.Close();
+                Close(); // 逾時：釋放 client，維持乾淨的未連線狀態
                 throw new TimeoutException($"連線 {_host}:{_port} 逾時");
             }
 
-            _client.EndConnect(result);
+            try
+            {
+                _client.EndConnect(result);
+                _stream = _client.GetStream();
+                _stream.ReadTimeout = 3000;
+                _stream.WriteTimeout = 3000;
+            }
+            catch
+            {
+                Close(); // 連線中斷 / 拒絕：釋放後再往外丟，由 UI 顯示錯誤
+                throw;
+            }
+        }
 
-            _stream = _client.GetStream();
-            _stream.ReadTimeout = 3000;
-            _stream.WriteTimeout = 3000;
+        /// <summary>
+        /// 連線失敗時不丟例外（含逾時 / 拒絕 / 主機關閉），改回傳 false + 錯誤訊息，
+        /// 讓 UI 直接顯示，避免偵錯器停在 throw。
+        /// </summary>
+        public bool TryOpen(out string errorMessage)
+        {
+            errorMessage = "";
+
+            Close(); // 先清掉任何舊連線，避免殘留 TcpClient / Stream
+
+            _client = new TcpClient();
+
+            try
+            {
+                var result = _client.BeginConnect(_host, _port, null, null);
+                if (!result.AsyncWaitHandle.WaitOne(3000))
+                {
+                    Close();
+                    errorMessage = $"連線 {_host}:{_port} 逾時";
+                    return false;
+                }
+
+                _client.EndConnect(result);
+                _stream = _client.GetStream();
+                _stream.ReadTimeout = 3000;
+                _stream.WriteTimeout = 3000;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Close();
+                errorMessage = ex.Message;
+                return false;
+            }
         }
 
         public void Close()
