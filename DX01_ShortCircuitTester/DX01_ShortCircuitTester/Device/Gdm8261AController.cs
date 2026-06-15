@@ -27,6 +27,9 @@ namespace DX01_ShortCircuitTester.Device
         void SetRangeAuto();
         void SetRange(string range);
 
+        /// <summary>切到 DC 電壓模式並固定檔位（送出 CONF:VOLT:DC &lt;range&gt;），避免被 auto 蓋掉。</summary>
+        void SetDcVoltageModeWithRange(double range);
+
         /// <summary>讀取目前量測值（電阻回傳 Ω，電壓回傳 V）。</summary>
         double Read();
     }
@@ -85,6 +88,11 @@ namespace DX01_ShortCircuitTester.Device
         public void SetRange(string range)
         {
             // 模擬：無動作
+        }
+
+        public void SetDcVoltageModeWithRange(double range)
+        {
+            _mode = MeasurementMode.DcVoltage;
         }
 
         public double Read()

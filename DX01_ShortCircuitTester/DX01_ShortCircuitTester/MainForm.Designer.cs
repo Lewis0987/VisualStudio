@@ -39,6 +39,7 @@ namespace DX01_ShortCircuitTester
             this.colName = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colRelay = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colMode = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colRange = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colValue = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colLimit = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colResult = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -317,6 +318,7 @@ namespace DX01_ShortCircuitTester
                 this.colName,
                 this.colRelay,
                 this.colMode,
+                this.colRange,
                 this.colValue,
                 this.colLimit,
                 this.colResult});
@@ -355,10 +357,17 @@ namespace DX01_ShortCircuitTester
             //
             // colMode
             //
-            this.colMode.FillWeight = 120F;
+            this.colMode.FillWeight = 110F;
             this.colMode.HeaderText = "模式";
             this.colMode.Name = "colMode";
             this.colMode.ReadOnly = true;
+            //
+            // colRange
+            //
+            this.colRange.FillWeight = 90F;
+            this.colRange.HeaderText = "Range";
+            this.colRange.Name = "colRange";
+            this.colRange.ReadOnly = true;
             //
             // colValue
             //
@@ -727,6 +736,7 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.DataGridViewTextBoxColumn colName;
         private System.Windows.Forms.DataGridViewTextBoxColumn colRelay;
         private System.Windows.Forms.DataGridViewTextBoxColumn colMode;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colRange;
         private System.Windows.Forms.DataGridViewTextBoxColumn colValue;
         private System.Windows.Forms.DataGridViewTextBoxColumn colLimit;
         private System.Windows.Forms.DataGridViewTextBoxColumn colResult;

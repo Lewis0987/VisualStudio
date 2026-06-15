@@ -191,8 +191,28 @@ namespace DX01_ShortCircuitTester.Device
                 return;
             }
 
+            if (_mode == MeasurementMode.DcVoltage)
+                WriteLog(LogKind.Info, "Set DC Voltage Range = " + range + "V");
+
             string conf = _mode == MeasurementMode.Resistance ? "CONF:RES " : "CONF:VOLT:DC ";
-            Send(conf + range);
+            Send(conf + range); // 例: CONF:VOLT:DC 100
+        }
+
+        public void SetDcVoltageModeWithRange(double range)
+        {
+            _mode = MeasurementMode.DcVoltage;
+            if (range <= 0)
+            {
+                // 0 = Auto：送 CONF:VOLT:DC（不帶檔位）
+                WriteLog(LogKind.Info, "Set DC Voltage Range = Auto");
+                Send("CONF:VOLT:DC");
+            }
+            else
+            {
+                string r = range.ToString("0.######", CultureInfo.InvariantCulture);
+                WriteLog(LogKind.Info, "Set DC Voltage Range = " + r + "V");
+                Send("CONF:VOLT:DC " + r); // 固定檔位，避免後續 auto 蓋掉
+            }
         }
 
         public double Read()

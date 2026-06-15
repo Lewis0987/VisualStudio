@@ -16,6 +16,7 @@
   "step8_pPlusMinusVoltage_max": 51,
   "step9_pPlusToCaseVoltage_max": 1,
   "step10_pMinusToCaseVoltage_max": 1,
+  "DcVoltageRange": 100,
   "current_min": 0,
   "current_max": 0,
   "Step1WaitMs": 0,
