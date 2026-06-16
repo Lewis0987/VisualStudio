@@ -491,7 +491,12 @@ namespace DX01_ShortCircuitTester
                         "1. LAN 線是否已接回\n" +
                         "2. IP / Port 是否正確\n" +
                         "3. 電表 LAN 功能是否啟用\n" +
-                        "4. 等待 3 秒後再試一次",
+                        "4. 等待 3 秒後再試一次\n" +
+                        "5. 若仍無法連線，請重新開啟 GDM-8261A 設備後再重新連線\n\n" +
+                        "可能原因：\n" +
+                        "- 網路連線異常\n" +
+                        "- 電表 TCP 通訊未正常釋放\n" +
+                        "- 設備端通訊狀態卡住",
                         "GDM LAN 連線失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 else
                     MessageBox.Show(this, "電表連線失敗:\n" + ex.Message, "錯誤",
