@@ -88,7 +88,7 @@ namespace DX01_ShortCircuitTester.Device
 
                 try
                 {
-                    // 3-4. 建立全新 TcpClient 並連線（帶 ConnectTimeoutMs）
+                    // 3-4. 建立全新 TcpClient 並連線（帶 ConnectTimeoutMs）；不重用任何舊連線物件
                     var t = new TcpTransport(Ip, TcpPort, cfg.ConnectTimeoutMs, cfg.ReadTimeoutMs);
                     t.Open();
                     _transport = t;

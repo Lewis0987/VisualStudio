@@ -131,24 +131,28 @@ namespace DX01_ShortCircuitTester.Services
                 await WaitStep(6, token);
                 AddInfoStep(result, 6, "切換電壓量測", "-", "DC電壓", RangeText(MeasurementMode.DcVoltage), "OK");
 
-                // 電壓步驟 Step7~Step10：任一 NG（含 Retry 後仍 NG）都不中止，依序跑完所有電壓步驟，
-                // 最終整體判定由 IsPass 處理（任一非資訊步驟 NG → FinalResult = NG）。
+                // 電壓步驟 Step7~Step10：與 Step3~5 一致，任一步驟（Retry 後仍）NG 立即停止，
+                // 不再執行後續 Step（恢復「任一 NG / 設備異常 → 立即停止」流程）。
 
                 // Step 7 電壓總值：Relay=11，V > 45V（Step7WaitMs 於 READ 前等待，待電壓穩定）。
-                await MeasureStep(result, 7, "電壓總值", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token);
+                if (!await MeasureStep(result, 7, "電壓總值", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token))
+                    return Finish(result);
 
                 // Step 8 P+ / P- 電壓：Relay=11，48V ~ 51V
-                await MeasureStep(result, 8, "P+ / P- 電壓", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token);
+                if (!await MeasureStep(result, 8, "P+ / P- 電壓", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token))
+                    return Finish(result);
 
                 // Step 9 P+ 對外殼電壓：Relay=01，V < 1V
-                await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token);
+                if (!await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token))
+                    return Finish(result);
 
                 // Step 10 P- 對外殼電壓：Relay=10，V < 1V
-                await MeasureStep(result, 10, "P- 對外殼電壓", "10",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token);
+                if (!await MeasureStep(result, 10, "P- 對外殼電壓", "10",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token))
+                    return Finish(result);
 
                 result.Completed = true;
             }

@@ -104,59 +104,37 @@ namespace DX01_ShortCircuitTester.Device
             _ioTimeoutMs = ioTimeoutMs > 0 ? ioTimeoutMs : 3000;
         }
 
-        // 不可只依賴 TcpClient.Connected（拔線後仍可能為 true）。
-        // 以非阻塞 Poll 偵測對方是否已關閉（收到 FIN/RST 時可讀但無資料）。
-        public bool IsOpen
-        {
-            get
-            {
-                if (_client == null || _stream == null)
-                    return false;
-                try
-                {
-                    if (!_client.Connected)
-                        return false;
-                    var sock = _client.Client;
-                    if (sock.Poll(0, SelectMode.SelectRead) && sock.Available == 0)
-                        return false; // 對方已關閉
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-        }
+        public bool IsOpen => _client != null && _client.Connected;
 
         public string Description => $"{_host}:{_port}";
 
+        // 連線邏輯完全比照 D:\GDM-8261A-Tester-2：每次都建立全新 TcpClient，
+        // 連線前先 Close() 釋放任何殘留物件，不重用舊連線。
         public void Open()
         {
+            Close(); // 先清掉任何舊連線，避免殘留 TcpClient / Stream
+
             _client = new TcpClient();
-            _client.NoDelay = true;
-            _client.ReceiveTimeout = _ioTimeoutMs;
-            _client.SendTimeout = _ioTimeoutMs;
 
             var result = _client.BeginConnect(_host, _port, null, null);
             if (!result.AsyncWaitHandle.WaitOne(_connectTimeoutMs))
             {
-                try { _client.Close(); } catch { }
+                Close(); // 逾時：釋放 client，維持乾淨的未連線狀態
                 throw new TimeoutException($"GDM LAN 連線逾時 {_host}:{_port}");
             }
 
-            _client.EndConnect(result);
-
-            // 中斷時送出 RST 立即收回連線，讓單一連線的儀器（GDM）能盡快釋放舊 session 供重連。
-            try { _client.LingerState = new LingerOption(true, 0); }
-            catch { }
-
-            // 開啟 TCP KeepAlive（額外保護）：讓 OS 在 ~5 秒內偵測到死連線。
-            try { EnableKeepAlive(_client.Client, 5000, 1000); }
-            catch { }
-
-            _stream = _client.GetStream();
-            _stream.ReadTimeout = _ioTimeoutMs;
-            _stream.WriteTimeout = _ioTimeoutMs;
+            try
+            {
+                _client.EndConnect(result);
+                _stream = _client.GetStream();
+                _stream.ReadTimeout = _ioTimeoutMs;
+                _stream.WriteTimeout = _ioTimeoutMs;
+            }
+            catch
+            {
+                Close(); // 連線中斷 / 拒絕：釋放後再往外丟，由上層顯示錯誤
+                throw;
+            }
         }
 
         /// <summary>清空輸入緩衝區的殘留資料（重連後避免讀到上一個 session 的舊回應）。</summary>
@@ -175,21 +153,9 @@ namespace DX01_ShortCircuitTester.Device
             catch { }
         }
 
-        /// <summary>開啟並設定 TCP KeepAlive（Windows：透過 IOControl 設定 tcp_keepalive 結構）。</summary>
-        private static void EnableKeepAlive(Socket socket, uint keepAliveTimeMs, uint keepAliveIntervalMs)
-        {
-            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            // struct tcp_keepalive { u_long onoff; u_long keepalivetime; u_long keepaliveinterval; }
-            byte[] inValue = new byte[12];
-            System.BitConverter.GetBytes((uint)1).CopyTo(inValue, 0);
-            System.BitConverter.GetBytes(keepAliveTimeMs).CopyTo(inValue, 4);
-            System.BitConverter.GetBytes(keepAliveIntervalMs).CopyTo(inValue, 8);
-            socket.IOControl(IOControlCode.KeepAliveValues, inValue, null);
-        }
-
         public void Close()
         {
-            // 完整釋放，避免後續沿用失效的 TcpClient / NetworkStream
+            // 完整釋放 NetworkStream / TcpClient，避免後續沿用失效的舊連線物件
             try { _stream?.Close(); } catch { }
             try { _client?.Close(); } catch { }
 
