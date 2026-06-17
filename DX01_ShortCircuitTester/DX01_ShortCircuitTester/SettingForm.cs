@@ -178,18 +178,18 @@ namespace DX01_ShortCircuitTester
             string err;
             if (!TryCollect(out err))
             {
-                MessageBox.Show(this, err, "設定錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "設定錯誤", err, MessageBoxIcon.Warning, "確定");
                 return;
             }
 
             string saveErr;
             if (!AppSettings.Current.Save(out saveErr))
             {
-                MessageBox.Show(this, "儲存失敗:\n" + saveErr, "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MsgBox.Show(this, "錯誤", "儲存失敗:\n" + saveErr, MessageBoxIcon.Error, "確定");
                 return;
             }
 
-            MessageBox.Show(this, "設定已儲存", "參數設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MsgBox.Show(this, "參數設定", "設定已儲存", MessageBoxIcon.Information, "確定");
             _saved = true;
             DialogResult = DialogResult.OK;
             Close();
@@ -200,9 +200,9 @@ namespace DX01_ShortCircuitTester
         {
             if (!_saved && BuildSnapshot() != _originalSnapshot)
             {
-                DialogResult r = MessageBox.Show(this, "尚有未儲存的修改，確定放棄?", "放棄修改",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (r != DialogResult.Yes)
+                // 1 = 是（放棄）；0 = 否 / 關閉視窗
+                int r = MsgBox.Show(this, "放棄修改", "尚有未儲存的修改，確定放棄?", MessageBoxIcon.Warning, "否", "是");
+                if (r != 1)
                 {
                     e.Cancel = true;
                     return;

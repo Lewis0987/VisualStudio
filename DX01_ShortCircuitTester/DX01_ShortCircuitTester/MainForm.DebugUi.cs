@@ -295,8 +295,7 @@ namespace DX01_ShortCircuitTester
         {
             if (!_relay.IsConnected)
             {
-                MessageBox.Show(this, "Relay未連線", "Relay未連線",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "Relay 未連線", "USB Relay 尚未連線，請先連線 Relay。", MessageBoxIcon.Warning, "確定");
                 return;
             }
 
@@ -319,8 +318,7 @@ namespace DX01_ShortCircuitTester
             catch (Exception ex)
             {
                 _debugLog.Write(LogKind.Error, "Relay 測試失敗: " + ex.Message);
-                MessageBox.Show(this, "Relay 測試失敗:\n" + ex.Message, "錯誤",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MsgBox.Show(this, "錯誤", "Relay 測試失敗:\n" + ex.Message, MessageBoxIcon.Error, "確定");
                 UpdateConnStatus();
             }
             finally
@@ -335,8 +333,7 @@ namespace DX01_ShortCircuitTester
         {
             if (!_meter.IsConnected)
             {
-                MessageBox.Show(this, "電表未連線", "電表未連線",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "電表未連線", "電表尚未連線，請先連線 GDM-8261A。", MessageBoxIcon.Warning, "確定");
                 return;
             }
 
@@ -362,8 +359,7 @@ namespace DX01_ShortCircuitTester
                 if (_meter.UseLan && !_meter.IsConnected)
                     NotifyLanDisconnected();
                 else
-                    MessageBox.Show(this, "電表測試失敗:\n" + ex.Message, "錯誤",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MsgBox.Show(this, "錯誤", "電表測試失敗:\n" + ex.Message, MessageBoxIcon.Error, "確定");
             }
             finally
             {

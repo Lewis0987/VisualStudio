@@ -46,6 +46,7 @@ namespace DX01_ShortCircuitTester
             this.lblInfo = new System.Windows.Forms.Label();
             this.lblConnGdm = new System.Windows.Forms.Label();
             this.lblConnRelay = new System.Windows.Forms.Label();
+            this.lblVersion = new System.Windows.Forms.Label();
             this.tabDevice = new System.Windows.Forms.TabPage();
             this.gbRelay = new System.Windows.Forms.GroupBox();
             this.lblRelayInfo = new System.Windows.Forms.Label();
@@ -386,6 +387,7 @@ namespace DX01_ShortCircuitTester
             this.panelFooter.Controls.Add(this.lblInfo);
             this.panelFooter.Controls.Add(this.lblConnGdm);
             this.panelFooter.Controls.Add(this.lblConnRelay);
+            this.panelFooter.Controls.Add(this.lblVersion);
             this.panelFooter.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelFooter.Location = new System.Drawing.Point(11, 649);
             this.panelFooter.Name = "panelFooter";
@@ -430,7 +432,21 @@ namespace DX01_ShortCircuitTester
             this.lblConnRelay.TabIndex = 2;
             this.lblConnRelay.Text = "Relay: 未連線";
             this.lblConnRelay.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
+            //
+            // lblVersion
+            //
+            this.lblVersion.AutoSize = true;
+            this.lblVersion.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblVersion.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
+            this.lblVersion.ForeColor = System.Drawing.Color.RoyalBlue;
+            this.lblVersion.Location = new System.Drawing.Point(0, 0);
+            this.lblVersion.Name = "lblVersion";
+            this.lblVersion.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
+            this.lblVersion.Size = new System.Drawing.Size(110, 20);
+            this.lblVersion.TabIndex = 3;
+            this.lblVersion.Text = "Version : V2.1";
+            this.lblVersion.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
             // tabDevice
             // 
             this.tabDevice.Controls.Add(this.gbRelay);
@@ -700,7 +716,7 @@ namespace DX01_ShortCircuitTester
             this.MinimumSize = new System.Drawing.Size(840, 620);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "DX01 外殼短路流程測試";
+            this.Text = "DX01 外殼短路流程測試 V2.1";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.tabMain.ResumeLayout(false);
             this.tabTest.ResumeLayout(false);
@@ -754,6 +770,7 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.Label lblInfo;
         private System.Windows.Forms.Label lblConnGdm;
         private System.Windows.Forms.Label lblConnRelay;
+        private System.Windows.Forms.Label lblVersion;
         private System.Windows.Forms.GroupBox gbGdm;
         private System.Windows.Forms.Label lblGdmPortCap;
         private System.Windows.Forms.ComboBox cbGdmPort;

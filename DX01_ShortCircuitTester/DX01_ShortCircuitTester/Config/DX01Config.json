@@ -25,7 +25,7 @@
   "Step4WaitMs": 0,
   "Step5WaitMs": 0,
   "Step6WaitMs": 0,
-  "Step7WaitMs": 10000,
+  "Step7WaitMs": 5000,
   "Step8WaitMs": 0,
   "Step9WaitMs": 0,
   "Step10WaitMs": 0,

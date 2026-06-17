@@ -15,6 +15,11 @@
 		<PackageReference Include="HidSharp" Version="2.1.0" />
 	</ItemGroup>
 
+	<!-- 共用元件 (Device / Services / Models) 已抽出至 DX01_Common -->
+	<ItemGroup>
+		<ProjectReference Include="..\DX01_Common\DX01_Common.csproj" />
+	</ItemGroup>
+
 	<!-- 設計UI加在這裡 -->
 	<ItemGroup>
 		<Compile Update="MainForm.cs">

@@ -26,6 +26,11 @@ namespace DX01_ShortCircuitTester
         private CancellationTokenSource _cts;
         private bool _running;
 
+        // V2.1：測試控制（暫停 / 停止）；btnPause/btnStop 於 BuildBarcodeArea 建立
+        private Button btnPause;
+        private Button btnStop;
+        private bool _userStopped;
+
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
 
@@ -40,6 +45,12 @@ namespace DX01_ShortCircuitTester
 
         private static readonly Color OkGreen = Color.FromArgb(46, 160, 67);
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
+
+        /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
+        public const string Version = "V2.1";
+
+        /// <summary>Power ON 檢查門檻：量測電壓 &gt;= 此值視為已開機。</summary>
+        private const double PowerOnMinVoltage = 1.0;
 
         // Test 頁底部連線狀態用色：已連線=綠、未連線=紅、連線中=橘
         private enum ConnState { Disconnected, Connecting, Connected }
@@ -63,9 +74,6 @@ namespace DX01_ShortCircuitTester
         }
 
         private System.Windows.Forms.Timer _okMsgTimer;
-
-        // LAN 背景連線監控（Heartbeat）：每數秒靜默 *IDN? 確認連線存活
-        private System.Windows.Forms.Timer _heartbeatTimer;
 
         // USB Relay 背景監控：每 1 秒偵測 VID/PID 插拔，自動連線 / 斷線
         private System.Windows.Forms.Timer _relayMonitorTimer;
@@ -117,13 +125,18 @@ namespace DX01_ShortCircuitTester
             UpdateConnStatus();
             UpdateSummaryStats(null);
 
-            // LAN 背景斷線偵測：間隔由 Config 控制（GdmMonitorIntervalMs，預設 1 秒）
-            _heartbeatTimer = new System.Windows.Forms.Timer
-            {
-                Interval = Math.Max(250, AppSettings.Current.GdmMonitorIntervalMs)
-            };
-            _heartbeatTimer.Tick += Heartbeat_Tick;
-            _heartbeatTimer.Start();
+            // V2.1：版本號（視窗標題 + 狀態列）
+            this.Text = "DX01 外殼短路流程測試 " + Version;
+            lblVersion.Text = "Version : " + Version;
+
+            // V2.1：右下角可收合的 USB Relay 控制小視窗
+            BuildRelayPanel();
+            UpdateRelayPanelState();
+
+            // V2.1：比照 GDM-8261A-Tester-2，移除待機 LAN 背景 *IDN? 心跳監控。
+            // 原因：拔線時背景 ping 會在「線材仍拔除」時就把連線 DropConnection 拆除，
+            // FIN 送不到 GDM，導致 GDM 端 session 卡住、需重開電表才能重連。
+            // 改為僅在「連線時」與「測試流程中」偵測斷線（與參考專案一致）。
 
             // USB Relay 背景偵測：每 1 秒偵測插拔（只更新狀態，不自動連線）
             _relayMonitorTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -132,29 +145,6 @@ namespace DX01_ShortCircuitTester
 
             tabMain.SelectedTab = tabTest;
             txtBarcode.Focus();
-        }
-
-        /// <summary>
-        /// LAN 背景斷線偵測（待機時）：靜默送出 *IDN?。失敗即判定斷線。
-        /// 待機斷線「不跳 Popup」，只更新 UI（電表未連線/紅）並寫 Debug Log。
-        /// 不自動重連——使用者需手動按「連線」。測試中由流程自行偵測（不在此處理）。
-        /// </summary>
-        private void Heartbeat_Tick(object sender, EventArgs e)
-        {
-            if (_running)               // 測試進行中由流程自行通訊，不重複偵測
-                return;
-            if (!_meter.UseLan)         // 只監控 LAN
-                return;
-            if (!_meter.IsConnected)    // 未連線不需偵測
-                return;
-
-            if (!_meter.PingDevice())
-            {
-                // PingDevice 失敗已 DropConnection → IsConnected=false
-                if (_debugLog != null)
-                    _debugLog.Write(LogKind.Error, "GDM LAN disconnected.");
-                UpdateConnStatus();     // 立即更新「電表：未連線」（紅）
-            }
         }
 
         /// <summary>
@@ -219,10 +209,11 @@ namespace DX01_ShortCircuitTester
             txtBarcode.Margin = Padding.Empty;
             int boxH = txtBarcode.PreferredHeight + 4;          // 上下各 2px 邊框
 
-            panelTop.ColumnCount = 2;
+            panelTop.ColumnCount = 3;
             panelTop.RowCount = 2;
             panelTop.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));          // 標題
             panelTop.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));     // 輸入框
+            panelTop.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));          // 暫停 / 停止
             panelTop.RowStyles.Add(new RowStyle(SizeType.Absolute, boxH));          // 第0列：標題 + 輸入框
             panelTop.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));           // 第1列：提示 / 錯誤（緊鄰輸入框下方）
 
@@ -241,6 +232,24 @@ namespace DX01_ShortCircuitTester
             };
             _barcodeBox.Controls.Add(txtBarcode);
             panelTop.Controls.Add(_barcodeBox, 1, 0);
+
+            // V2.1：條碼輸入框右側的測試控制按鈕（暫停 / 停止）
+            var ctrlPanel = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Margin = new Padding(8, 0, 0, 0),
+                Anchor = AnchorStyles.Left | AnchorStyles.Right
+            };
+            btnPause = new Button { Text = "暫停", Size = new Size(72, boxH), Enabled = false, Margin = new Padding(0, 0, 4, 0) };
+            btnStop = new Button { Text = "停止", Size = new Size(72, boxH), Enabled = false, Margin = new Padding(0) };
+            btnPause.Click += BtnPause_Click;
+            btnStop.Click += BtnStop_Click;
+            ctrlPanel.Controls.Add(btnPause);
+            ctrlPanel.Controls.Add(btnStop);
+            panelTop.Controls.Add(ctrlPanel, 2, 0);
 
             // 提示 / 錯誤：第 1 列、靠左對齊輸入框、緊鄰下方（上邊距約 3px）
             lblBarcodeMsg.AutoSize = false;
@@ -448,15 +457,13 @@ namespace DX01_ShortCircuitTester
             {
                 if (txtGdmIp.Text.Trim().Length == 0)
                 {
-                    MessageBox.Show(this, "請輸入 IP 位址。", "尚未輸入 IP",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MsgBox.Show(this, "尚未輸入 IP", "請輸入 IP 位址。", MessageBoxIcon.Warning, "確定");
                     return;
                 }
                 int port;
                 if (!int.TryParse(txtGdmPort.Text.Trim(), out port) || port < 1 || port > 65535)
                 {
-                    MessageBox.Show(this, "Port 必須是 1~65535 的整數。", "Port 格式錯誤",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MsgBox.Show(this, "Port 格式錯誤", "Port 必須是 1~65535 的整數。", MessageBoxIcon.Warning, "確定");
                     return;
                 }
             }
@@ -464,8 +471,7 @@ namespace DX01_ShortCircuitTester
             {
                 if (cbGdmPort.SelectedItem == null)
                 {
-                    MessageBox.Show(this, "請先選擇 COM Port（按搜尋 COM Port 偵測）。", "尚未選擇 COM Port",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MsgBox.Show(this, "尚未選擇 COM Port", "請先選擇 COM Port（按搜尋 COM Port 偵測）。", MessageBoxIcon.Warning, "確定");
                     return;
                 }
             }
@@ -485,7 +491,7 @@ namespace DX01_ShortCircuitTester
             catch (Exception ex)
             {
                 if (lan)
-                    MessageBox.Show(this,
+                    MsgBox.Show(this, "GDM LAN 連線失敗",
                         "無法重新連線到 GDM-8261A。\n\n" +
                         "請確認：\n" +
                         "1. LAN 線是否已接回\n" +
@@ -497,10 +503,9 @@ namespace DX01_ShortCircuitTester
                         "- 網路連線異常\n" +
                         "- 電表 TCP 通訊未正常釋放\n" +
                         "- 設備端通訊狀態卡住",
-                        "GDM LAN 連線失敗", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBoxIcon.Error, "確定");
                 else
-                    MessageBox.Show(this, "電表連線失敗:\n" + ex.Message, "錯誤",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MsgBox.Show(this, "錯誤", "電表連線失敗:\n" + ex.Message, MessageBoxIcon.Error, "確定");
             }
 
             UpdateConnStatus();
@@ -531,8 +536,7 @@ namespace DX01_ShortCircuitTester
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Relay 連線失敗:\n" + ex.Message, "錯誤",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MsgBox.Show(this, "錯誤", "Relay 連線失敗:\n" + ex.Message, MessageBoxIcon.Error, "確定");
             }
 
             UpdateConnStatus();
@@ -620,6 +624,7 @@ namespace DX01_ShortCircuitTester
             if (lblDevInfoRelay != null)
                 lblDevInfoRelay.Text = "Relay VID/PID: 16C0:05DF  " + (r ? "(已連線)" : "(未連線)");
 
+            UpdateRelayPanelState();   // 同步右下角 Relay 小視窗的可用狀態 / 燈號
         }
 
         /// <summary>電表「連線」按鈕狀態：已連線→Disable/綠色/「已連線」；未連線→Enable/反灰/「連線」。</summary>
@@ -729,10 +734,11 @@ namespace DX01_ShortCircuitTester
             string prevResult;
             if (_testedBarcodes.TryGetValue(sn, out prevResult))
             {
-                var dr = MessageBox.Show(this,
+                // 1 = 重新測試；0 = 取消（或關閉視窗 -1）
+                int dr = MsgBox.Show(this, "重覆測試確認",
                     "條碼：" + sn + "\n\n已完成測試。\n\n結果：" + prevResult + "\n\n是否重新測試？",
-                    "重覆測試確認", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-                if (dr != DialogResult.OK)
+                    MessageBoxIcon.Question, "取消", "重新測試");
+                if (dr != 1)
                 {
                     // 取消：停止流程，保留條碼方便操作
                     txtBarcode.SelectAll();
@@ -773,8 +779,75 @@ namespace DX01_ShortCircuitTester
             if (_lanLostShown)
                 return;
             _lanLostShown = true;
-            MessageBox.Show(this, "LAN 連線中斷，\n請確認網路線或儀器狀態。", "LAN 斷線",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MsgBox.Show(this, "LAN 斷線", "LAN 連線中斷，\n請確認網路線或儀器狀態。", MessageBoxIcon.Warning, "確定");
+        }
+
+        /// <summary>測試控制按鈕（暫停 / 停止）啟用狀態；停用時將「暫停」文字復位。</summary>
+        private void SetTestControlsEnabled(bool running)
+        {
+            if (btnPause == null || btnStop == null) return;
+            btnPause.Enabled = running;
+            btnStop.Enabled = running;
+            if (!running) btnPause.Text = "暫停";
+        }
+
+        private void BtnPause_Click(object sender, EventArgs e)
+        {
+            if (!_running) return;
+            if (!_flow.IsPaused)
+            {
+                _flow.Pause();
+                btnPause.Text = "繼續";
+                lblCurrentStep.Text = "暫停中";
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "測試已暫停（暫停中）");
+            }
+            else
+            {
+                _flow.Resume();
+                btnPause.Text = "暫停";
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "測試已繼續");
+            }
+        }
+
+        private void BtnStop_Click(object sender, EventArgs e)
+        {
+            if (!_running) return;
+            _userStopped = true;
+            if (_debugLog != null) _debugLog.Write(LogKind.Error, "測試已由使用者停止");
+            // 取消令會解除暫停等待（WaitWhilePausedAsync 內已註冊 token），流程隨即中止
+            try { if (_cts != null) _cts.Cancel(); } catch { }
+            SetTestControlsEnabled(false);
+        }
+
+        /// <summary>PASS：清空條碼、Focus（顯示 placeholder），等待掃下一顆。</summary>
+        private void ClearBarcodeForNext()
+        {
+            txtBarcode.Clear();   // 觸發 TextChanged → 顯示 placeholder
+            txtBarcode.Focus();
+        }
+
+        /// <summary>NG / 異常 / 停止 / 未開機：保留原條碼、Focus、全選，方便直接重測或人工確認。</summary>
+        private void KeepBarcodeForRetry(string sn)
+        {
+            txtBarcode.Text = sn ?? "";
+            txtBarcode.Focus();
+            txtBarcode.SelectAll();
+        }
+
+        /// <summary>
+        /// 「產品未開機」彈窗（兩按鈕）。
+        /// 回傳 true = 略過（忽略警告繼續測試）；false = 確定（停止測試）。
+        /// 自訂對話框以支援按鈕文字 / 水平靠右排列（MessageBox 無法自訂）。
+        /// </summary>
+        private bool ShowPowerOffPrompt(double voltage)
+        {
+            string msg =
+                "偵測到產品電壓過低。\n" +
+                "目前量測值：" + voltage.ToString("0.000") + " V\n\n" +
+                "「確定」：停止測試，確認產品開機後重測。\n" +
+                "「略過」：忽略此警告並繼續測試。";
+            // 0 = 略過（繼續），1 = 確定（停止）；Enter / 關閉 → 確定（安全停止）
+            return MsgBox.Show(this, "產品未開機", msg, MessageBoxIcon.Warning, "略過", "確定") == 0;
         }
 
         private async void StartTest(string sn)
@@ -784,24 +857,21 @@ namespace DX01_ShortCircuitTester
 
             if (!_meter.IsConnected)
             {
-                MessageBox.Show(this, "電表未連線", "電表未連線",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "電表未連線", "電表尚未連線，請先連線 GDM-8261A。", MessageBoxIcon.Warning, "確定");
                 tabMain.SelectedTab = tabDevice;
                 return;
             }
 
             if (!_relay.IsConnected)
             {
-                MessageBox.Show(this, "Relay未連線", "Relay未連線",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "Relay 未連線", "USB Relay 尚未連線，請先連線 Relay。", MessageBoxIcon.Warning, "確定");
                 tabMain.SelectedTab = tabDevice;
                 return;
             }
 
             if (string.IsNullOrEmpty(sn))
             {
-                MessageBox.Show(this, "請先掃描或輸入條碼/序號。", "尚未輸入序號",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MsgBox.Show(this, "尚未輸入序號", "請先掃描或輸入條碼 / 序號。", MessageBoxIcon.Warning, "確定");
                 txtBarcode.Focus();
                 return;
             }
@@ -811,6 +881,70 @@ namespace DX01_ShortCircuitTester
             // 開始測試 → 立即清空條碼輸入框（原始條碼保留於序號列 / CSV / Debug Log）
             txtBarcode.Clear();
 
+            // ── 測試開始前：產品 Power ON 檢查（避免到 Step7 才發現產品未開機）──
+            SetRunningState(true);
+            lblCurrentStep.Text = "Power ON 檢查";
+            SetResult("檢查中", Color.White, Color.RoyalBlue);
+
+            _cts = new CancellationTokenSource();
+            PowerCheckResult power;
+            try
+            {
+                power = await _flow.CheckPowerOnAsync(PowerOnMinVoltage, _cts.Token);
+            }
+            catch (Exception ex)
+            {
+                power = new PowerCheckResult { HasAnomaly = true, AnomalyType = "Device Error", AnomalyMessage = ex.Message };
+            }
+            finally
+            {
+                _cts.Dispose();
+                _cts = null;
+            }
+
+            // 設備 / 通訊異常：立即停止、提示，Final Result = NG（不進入 Step1）
+            if (power.HasAnomaly)
+            {
+                SetResult("NG", Color.White, NgRed);
+                SetRunningState(false);
+                HandleDeviceAnomaly(new TestResult
+                {
+                    HasAnomaly = true,
+                    AnomalyType = power.AnomalyType,
+                    AnomalyMessage = power.AnomalyMessage,
+                    AnomalyStep = 0,
+                    AnomalyStepName = "Power ON 檢查"
+                });
+                ResetLiveStatus();
+                KeepBarcodeForRetry(sn);   // 視同 NG：保留條碼 + Focus + SelectAll
+                return;
+            }
+
+            // 產品未開機（電壓過低）：不進入 Step1、不建立測試結果，提示後 Focus 回條碼
+            if (!power.PowerOn)
+            {
+                if (_debugLog != null)
+                    _debugLog.Write(LogKind.Error,
+                        "Power OFF：量測 " + power.Voltage.ToString("0.000") + " V < " +
+                        PowerOnMinVoltage.ToString("0.###") + " V");
+
+                bool skip = ShowPowerOffPrompt(power.Voltage);
+                if (!skip)
+                {
+                    // 確定：停止測試、保留條碼、回待測（視同 NG）
+                    if (_debugLog != null) _debugLog.Write(LogKind.Info, "Power OFF：使用者選擇「確定」→ 停止測試");
+                    SetResult("待測", Color.DimGray, Color.Gainsboro);
+                    SetRunningState(false);
+                    ResetLiveStatus();
+                    KeepBarcodeForRetry(sn);
+                    return;
+                }
+
+                // 略過：忽略警告、不停止，繼續往下執行 Step1~Step10
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Power OFF：使用者選擇「略過」→ 繼續測試");
+            }
+
+            // ── Power ON → 進入正式測試 ──
             // 重置畫面（Return to Step1），並固定新增「序號」列（粗體、不計入統計）
             dgvResults.Rows.Clear();
             AddSerialRow(sn);
@@ -818,9 +952,10 @@ namespace DX01_ShortCircuitTester
             lblRelay.Text = "--";
             lblCurrentStep.Text = "測試中";
             SetResult("測試中", Color.White, Color.RoyalBlue);
-            SetRunningState(true);
 
             _cts = new CancellationTokenSource();
+            _userStopped = false;
+            SetTestControlsEnabled(true);   // 進入正式測試 → 暫停 / 停止可用
 
             TestResult result;
             try
@@ -831,10 +966,11 @@ namespace DX01_ShortCircuitTester
             {
                 lblInfo.Text = "測試發生例外: " + ex.Message;
                 SetResult("NG", Color.White, NgRed);
+                SetTestControlsEnabled(false);
                 SetRunningState(false);
                 UpdateConnStatus(); // 設備可能因例外失聯，更新狀態
                 ResetLiveStatus();
-                txtBarcode.Focus();
+                KeepBarcodeForRetry(sn);   // 視同 NG：保留條碼 + Focus + SelectAll
                 return;
             }
             finally
@@ -868,9 +1004,12 @@ namespace DX01_ShortCircuitTester
             }
             _relayLostDuringTest = false;
 
+            // V2.1：測試結束 → 停用暫停 / 停止
+            SetTestControlsEnabled(false);
+
             // Step11 FinalResult：全流程跑完後才更新大型判定 Label
             if (result.Aborted)
-                SetResult("中止", Color.White, Color.DarkOrange);
+                SetResult(_userStopped ? "停止" : "中止", Color.White, Color.DarkOrange);
             else if (result.HasAnomaly)
                 SetResult("NG", Color.White, NgRed);
             else if (result.IsPass)
@@ -902,7 +1041,13 @@ namespace DX01_ShortCircuitTester
 
             // Step12 Return Step1：恢復待測顯示，等待下一筆條碼
             ResetLiveStatus();
-            txtBarcode.Focus();
+
+            // V2.1 條碼行為：PASS → 清空等待下一顆；NG / 異常 / 停止 → 保留原條碼 + 全選方便重測
+            bool pass = !result.Aborted && !result.HasAnomaly && result.IsPass;
+            if (pass)
+                ClearBarcodeForNext();
+            else
+                KeepBarcodeForRetry(result.SerialNumber);
         }
 
         /// <summary>設備異常處理：寫 Debug Log、修正 Relay 狀態、顯示「設備異常」Popup。</summary>
@@ -924,29 +1069,29 @@ namespace DX01_ShortCircuitTester
 
             if (relayIssue)
             {
-                MessageBox.Show(this,
+                MsgBox.Show(this, "Relay 異常",
                     "偵測到 USB Relay 異常。\n\n" +
                     "可能原因：\n" +
                     "1. USB 已拔除\n" +
                     "2. Relay 板故障\n" +
                     "3. HID 通訊失敗\n\n" +
                     "請確認設備後重新測試。",
-                    "Relay 異常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBoxIcon.Error, "確定");
             }
             else if (_meter.UseLan)
             {
-                // LAN 測試中斷線（section 4）
-                MessageBox.Show(this,
+                // LAN 測試中斷線
+                MsgBox.Show(this, "設備異常",
                     "偵測到 GDM LAN 斷線。\n\n" +
                     "請確認：\n" +
                     "1. LAN 線是否接妥\n" +
                     "2. IP / Port 是否正確\n" +
                     "3. 電表 LAN 功能是否正常",
-                    "設備異常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBoxIcon.Error, "確定");
             }
             else
             {
-                MessageBox.Show(this,
+                MsgBox.Show(this, "設備異常",
                     "偵測到設備或網路異常\n\n" +
                     "異常類型：" + result.AnomalyType + "\n\n" +
                     "Step：" + result.AnomalyStep + " " + result.AnomalyStepName + "\n\n" +
@@ -955,7 +1100,7 @@ namespace DX01_ShortCircuitTester
                     "2. LAN / COM\n" +
                     "3. Relay USB\n" +
                     "4. 設定參數",
-                    "設備異常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBoxIcon.Error, "確定");
             }
         }
 
@@ -994,6 +1139,7 @@ namespace DX01_ShortCircuitTester
         private void OnRelayChanged(object sender, string code)
         {
             UpdateRelayDisplay(code);
+            UpdateRelayPanelVisual(code);   // 同步右下角 Relay 小視窗燈號
         }
 
         /// <summary>同步 Test 頁「Relay 狀態」顯示（執行緒安全）。</summary>
@@ -1074,6 +1220,7 @@ namespace DX01_ShortCircuitTester
             _running = running;
             txtBarcode.Enabled = !running;
             tabDevice.Enabled = !running; // 測試中不可改設備設定
+            UpdateRelayPanelState();      // 測試中停用 Relay 小視窗手動控制
         }
 
         /// <summary>
@@ -1116,13 +1263,6 @@ namespace DX01_ShortCircuitTester
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (_heartbeatTimer != null)
-            {
-                _heartbeatTimer.Stop();
-                _heartbeatTimer.Dispose();
-                _heartbeatTimer = null;
-            }
-
             if (_relayMonitorTimer != null)
             {
                 _relayMonitorTimer.Stop();

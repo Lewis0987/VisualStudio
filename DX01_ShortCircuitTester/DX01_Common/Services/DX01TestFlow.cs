@@ -33,6 +33,17 @@ namespace DX01_ShortCircuitTester.Services
         }
     }
 
+    /// <summary>產品 Power ON 檢查結果（測試開始前執行，不建立 TestResult）。</summary>
+    public sealed class PowerCheckResult
+    {
+        public bool PowerOn { get; set; }
+        public double Voltage { get; set; }
+        public double MinVoltage { get; set; }
+        public bool HasAnomaly { get; set; }
+        public string AnomalyType { get; set; }
+        public string AnomalyMessage { get; set; }
+    }
+
     /// <summary>
     /// DX01 外殼短路測試流程（共 10 步驟）。
     /// 與 UI 解耦：透過事件回報進度，呼叫端（MainForm）只負責顯示。
@@ -90,6 +101,7 @@ namespace DX01_ShortCircuitTester.Services
             };
 
             RaiseStatus("測試中…");
+            ResetPause();   // 確保不殘留上一輪的暫停狀態
 
             try
             {
@@ -107,20 +119,21 @@ namespace DX01_ShortCircuitTester.Services
                 await WaitStep(2, token);
                 AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-", "-", "OK");
 
+                // V2.1：Step3~Step10 任一 NG 不再中止流程，記錄 NG 後繼續執行後續 Step，
+                // 跑完 Step10 才由 Step11 最終判定（任一非資訊步驟 NG → Final Result = NG）。
+                // 僅「設備 / 通訊異常」（例外）才會在下方 catch 立即停止。
+
                 // Step 3 外殼對機殼導通：Relay=00，R < 10Ω
-                if (!await MeasureStep(result, 3, "外殼對機殼導通", "00",
-                        MeasurementMode.Resistance, "Ω", null, Cfg.Step3CaseToChassisMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 3, "外殼對機殼導通", "00",
+                        MeasurementMode.Resistance, "Ω", null, Cfg.Step3CaseToChassisMax, token);
 
                 // Step 4 P+ 對外殼絕緣：Relay=01，R > 1MΩ
-                if (!await MeasureStep(result, 4, "P+ 對外殼絕緣", "01",
-                        MeasurementMode.Resistance, "Ω", Cfg.Step4PPlusInsulationMin, null, token))
-                    return Finish(result);
+                await MeasureStep(result, 4, "P+ 對外殼絕緣", "01",
+                        MeasurementMode.Resistance, "Ω", Cfg.Step4PPlusInsulationMin, null, token);
 
                 // Step 5 P- 對外殼絕緣：Relay=10，R > 1MΩ
-                if (!await MeasureStep(result, 5, "P- 對外殼絕緣", "10",
-                        MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token))
-                    return Finish(result);
+                await MeasureStep(result, 5, "P- 對外殼絕緣", "10",
+                        MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token);
 
                 // Step 6 切換電壓量測：DC Voltage、Range 由 Config（無判定值，仍列入結果顯示）
                 string dcRangeLabel = Cfg.DcVoltageRange <= 0
@@ -131,28 +144,21 @@ namespace DX01_ShortCircuitTester.Services
                 await WaitStep(6, token);
                 AddInfoStep(result, 6, "切換電壓量測", "-", "DC電壓", RangeText(MeasurementMode.DcVoltage), "OK");
 
-                // 電壓步驟 Step7~Step10：與 Step3~5 一致，任一步驟（Retry 後仍）NG 立即停止，
-                // 不再執行後續 Step（恢復「任一 NG / 設備異常 → 立即停止」流程）。
-
                 // Step 7 電壓總值：Relay=11，V > 45V（Step7WaitMs 於 READ 前等待，待電壓穩定）。
-                if (!await MeasureStep(result, 7, "電壓總值", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token))
-                    return Finish(result);
+                await MeasureStep(result, 7, "電壓總值", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token);
 
                 // Step 8 P+ / P- 電壓：Relay=11，48V ~ 51V
-                if (!await MeasureStep(result, 8, "P+ / P- 電壓", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 8, "P+ / P- 電壓", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token);
 
                 // Step 9 P+ 對外殼電壓：Relay=01，V < 1V
-                if (!await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token);
 
                 // Step 10 P- 對外殼電壓：Relay=10，V < 1V
-                if (!await MeasureStep(result, 10, "P- 對外殼電壓", "10",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token))
-                    return Finish(result);
+                await MeasureStep(result, 10, "P- 對外殼電壓", "10",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token);
 
                 result.Completed = true;
             }
@@ -173,6 +179,42 @@ namespace DX01_ShortCircuitTester.Services
             }
 
             return Finish(result);
+        }
+
+        /// <summary>
+        /// 正式測試前的產品 Power ON 檢查：DC 電壓模式（Cfg.DcVoltageRange）、Relay=11、READ?。
+        /// 電壓 &gt;= minVoltage 視為已開機。檢查後一律將 Relay 復位 00。
+        /// 不建立 TestResult；設備 / 通訊異常時回報 HasAnomaly，交由 UI 處理。
+        /// </summary>
+        public async Task<PowerCheckResult> CheckPowerOnAsync(double minVoltage, CancellationToken token)
+        {
+            var r = new PowerCheckResult { MinVoltage = minVoltage };
+            try
+            {
+                RaiseStatus("Power ON 檢查…");
+                RaiseStep(0, "Power ON 檢查", RangeText(MeasurementMode.DcVoltage));
+                _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
+                SwitchRelay("11");
+                await Delay(Cfg.RelaySwitchDelayMs, token);
+                double v = _meter.Read();
+                Measured?.Invoke(this, new MeasurementEventArgs(v, "V"));
+                r.Voltage = v;
+                r.PowerOn = v >= minVoltage;
+
+                // 檢查後還原 Relay 至安全狀態（不論 ON / OFF）
+                try { SwitchRelay("00"); } catch { }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                r.HasAnomaly = true;
+                r.AnomalyType = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
+                r.AnomalyMessage = ex.Message;
+            }
+            return r;
         }
 
         /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。judgement 可覆寫結果欄（如 Step6 顯示 OK）。</summary>
@@ -236,6 +278,9 @@ namespace DX01_ShortCircuitTester.Services
 
             for (int i = 0; i < maxAttempts; i++) // i = 0-based 嘗試索引（= Retry 編號）
             {
+                // 暫停檢查點①：進入此步驟（含複測）前 → 暫停則停在目前 Step，不切換到下一步
+                await WaitWhilePausedAsync(token);
+
                 // 標題只顯示 動作名稱（+Retry）；Relay 由下方「Relay 狀態」欄顯示，不放進標題避免過長
                 string desc = i == 0 ? name : name + " Retry " + i;
                 RaiseStep(step, desc, RangeText(mode));
@@ -249,6 +294,10 @@ namespace DX01_ShortCircuitTester.Services
                 LogInfo("RelaySwitchDelayMs = " + Cfg.RelaySwitchDelayMs);
                 await Delay(Cfg.RelaySwitchDelayMs, token); // ③ 等待繼電器穩定
                 await WaitStep(step, token);                // ④ 等待 StepNWaitMs
+
+                // 暫停檢查點②：等待 StepWaitMs 完成後、READ? 之前 → 暫停在此生效（READ? 進行中則待其完成）
+                await WaitWhilePausedAsync(token);
+
                 double value = _meter.Read();               // ⑤ READ?
                 Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
                 bool pass = Evaluate(value, low, high);      // ⑤ 判定
@@ -343,6 +392,67 @@ namespace DX01_ShortCircuitTester.Services
         private void RaiseStatus(string status)
         {
             StatusChanged?.Invoke(this, status);
+        }
+
+        // ===== 暫停 / 繼續 =====
+        private readonly object _pauseLock = new object();
+        private TaskCompletionSource<bool> _resumeTcs;
+
+        /// <summary>目前是否暫停中。</summary>
+        public bool IsPaused { get; private set; }
+
+        /// <summary>暫停流程：在下一個暫停檢查點停住，不執行後續步驟。</summary>
+        public void Pause()
+        {
+            lock (_pauseLock)
+            {
+                if (IsPaused) return;
+                IsPaused = true;
+                _resumeTcs = new TaskCompletionSource<bool>();
+            }
+            RaiseStatus("暫停中…");
+        }
+
+        /// <summary>從暫停處繼續（不重新開始、不清空已完成結果）。</summary>
+        public void Resume()
+        {
+            TaskCompletionSource<bool> tcs;
+            lock (_pauseLock)
+            {
+                if (!IsPaused) return;
+                IsPaused = false;
+                tcs = _resumeTcs;
+                _resumeTcs = null;
+            }
+            RaiseStatus("測試中…");
+            tcs?.TrySetResult(true);
+        }
+
+        /// <summary>每次流程開始時重置暫停狀態，確保不殘留上一輪的暫停 / 取消。</summary>
+        private void ResetPause()
+        {
+            lock (_pauseLock)
+            {
+                IsPaused = false;
+                _resumeTcs = null;
+            }
+        }
+
+        /// <summary>暫停檢查點：暫停則等待至 Resume；期間若取消（停止）則丟出 OperationCanceledException。</summary>
+        private async Task WaitWhilePausedAsync(CancellationToken token)
+        {
+            Task wait;
+            lock (_pauseLock)
+            {
+                if (!IsPaused || _resumeTcs == null)
+                    return;
+                wait = _resumeTcs.Task;
+            }
+
+            using (token.Register(() => { lock (_pauseLock) { _resumeTcs?.TrySetCanceled(); } }))
+            {
+                await wait; // Resume → 正常返回；Stop(cancel) → OperationCanceledException
+            }
         }
 
         private async Task Delay(int ms, CancellationToken token)

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- DX01 壓力測試程式 (工程驗證) — .NET Framework 4.8 WinForms -->
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<UseWindowsForms>true</UseWindowsForms>
+		<RootNamespace>DX01_StressTester</RootNamespace>
+		<AssemblyName>DX01_StressTester</AssemblyName>
+		<LangVersion>7.3</LangVersion>
+	</PropertyGroup>
+
+	<!-- 共用通訊 / 設定 / 判定 / Log 邏輯一律來自 DX01_Common（不複製第二份） -->
+	<ItemGroup>
+		<ProjectReference Include="..\DX01_Common\DX01_Common.csproj" />
+	</ItemGroup>
+
+	<!-- WinForms Designer 架構：StressForm.cs / .Designer.cs / .resx -->
+	<ItemGroup>
+		<Compile Update="StressForm.cs">
+			<SubType>Form</SubType>
+		</Compile>
+		<Compile Update="StressForm.Designer.cs">
+			<DependentUpon>StressForm.cs</DependentUpon>
+		</Compile>
+		<EmbeddedResource Update="StressForm.resx">
+			<DependentUpon>StressForm.cs</DependentUpon>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>
