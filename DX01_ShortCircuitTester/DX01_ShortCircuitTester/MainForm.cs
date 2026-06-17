@@ -1219,8 +1219,20 @@ namespace DX01_ShortCircuitTester
         {
             _running = running;
             txtBarcode.Enabled = !running;
-            tabDevice.Enabled = !running; // 測試中不可改設備設定
+            SetTestingUiLock(running);    // 鎖定 Settings 參數 + Debug Log 清除
             UpdateRelayPanelState();      // 測試中停用 Relay 小視窗手動控制
+        }
+
+        /// <summary>
+        /// 測試執行中（含暫停）鎖定 UI，避免修改參數或清除紀錄造成結果不一致：
+        /// Settings(設備設定)頁全部反灰（含連線參數 / Save / Apply / 設定按鈕）、Debug Log「清除 Log」停用。
+        /// 測試結束（PASS / FAIL / 停止 / 異常 / 斷線）自動恢復。Test 頁與 Stop 按鈕不受影響。
+        /// </summary>
+        private void SetTestingUiLock(bool isTesting)
+        {
+            tabDevice.Enabled = !isTesting;                 // Settings 頁所有設定控制項
+            if (btnClearLog != null)
+                btnClearLog.Enabled = !isTesting;           // Debug Log 清除按鈕
         }
 
         /// <summary>
