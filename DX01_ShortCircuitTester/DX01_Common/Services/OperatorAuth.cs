@@ -188,7 +188,7 @@ namespace DX01_ShortCircuitTester.Services
             if (!IsValidRole(role)) { error = "角色僅能為 Admin 或 Operator。"; return false; }
             if (!IsValidPassword(password)) { error = PwdFormatError; return false; }
             if (_accounts.Any(a => string.Equals(a.Id, id, StringComparison.Ordinal)))
-            { error = "帳號已存在。"; return false; }
+            { error = "工號已存在。"; return false; }
 
             _accounts.Add(new OperatorAccount
             {

@@ -185,8 +185,8 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// 正式測試前的產品 Power ON 檢查：DC 電壓模式（Cfg.DcVoltageRange）、Relay=11、READ?。
-        /// 電壓 &gt;= minVoltage 視為已開機。檢查後一律將 Relay 復位 00。
+        /// 正式測試流程前的 Step 0「Power DC 48V 檢查」：DC 電壓模式、固定 100V 檔位、Relay=11、READ?。
+        /// 電壓 &gt;= minVoltage（48V）視為 PASS。檢查後一律將 Relay 復位 00。
         /// 不建立 TestResult；設備 / 通訊異常時回報 HasAnomaly，交由 UI 處理。
         /// </summary>
         public async Task<PowerCheckResult> CheckPowerOnAsync(double minVoltage, CancellationToken token)
@@ -194,9 +194,9 @@ namespace DX01_ShortCircuitTester.Services
             var r = new PowerCheckResult { MinVoltage = minVoltage };
             try
             {
-                RaiseStatus("Power ON 檢查…");
-                RaiseStep(0, "Power ON 檢查", RangeText(MeasurementMode.DcVoltage));
-                _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
+                RaiseStatus("Power DC 48V 檢查…");
+                RaiseStep(0, "Power DC 48V 檢查", "100V");
+                _meter.SetDcVoltageModeWithRange(100.0);   // Step 0：固定 100V 檔位（DC Voltage、Relay 11）
                 SwitchRelay("11");
                 await Delay(Cfg.RelaySwitchDelayMs, token);
                 double v = _meter.Read();

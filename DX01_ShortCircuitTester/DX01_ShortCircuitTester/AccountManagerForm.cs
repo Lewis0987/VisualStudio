@@ -62,7 +62,8 @@ namespace DX01_ShortCircuitTester
             var gb = new GroupBox { Text = "新增 / 重設", Location = new Point(12, 200), Size = new Size(496, 110), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
             var lblId = new Label { Text = "工號：", Location = new Point(14, 28), AutoSize = true };
-            _txtId = new TextBox { Location = new Point(70, 24), Size = new Size(120, 25), MaxLength = 8 };
+            // 不限制輸入長度（移除 MaxLength）；格式驗證於新增時進行
+            _txtId = new TextBox { Location = new Point(70, 24), Size = new Size(120, 25) };
             var lblRole = new Label { Text = "角色：", Location = new Point(206, 28), AutoSize = true };
             _cbRole = new ComboBox { Location = new Point(262, 24), Size = new Size(110, 25), DropDownStyle = ComboBoxStyle.DropDownList };
             _cbRole.Items.AddRange(new object[] { "Operator", "Admin" });
@@ -114,9 +115,23 @@ namespace DX01_ShortCircuitTester
 
         private void BtnAdd_Click(object sender, EventArgs e)
         {
+            // 工號格式驗證（英數字工號）
+            if (!OperatorAuth.IsValidId(_txtId.Text))
+            {
+                MsgBox.Show(this, "新增失敗", "工號格式錯誤\n請輸入英數字工號", MessageBoxIcon.Warning, "確定");
+                return;
+            }
+
             if (_txtPwd.Text != _txtPwd2.Text)
             {
                 MsgBox.Show(this, "新增失敗", "兩次密碼輸入不一致。", MessageBoxIcon.Warning, "確定");
+                return;
+            }
+
+            // 密碼格式驗證（英數字密碼）
+            if (!OperatorAuth.IsValidPassword(_txtPwd.Text))
+            {
+                MsgBox.Show(this, "新增失敗", "密碼格式錯誤\n請輸入英數字密碼", MessageBoxIcon.Warning, "確定");
                 return;
             }
 

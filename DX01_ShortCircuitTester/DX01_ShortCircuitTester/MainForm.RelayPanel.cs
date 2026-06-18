@@ -177,12 +177,17 @@ namespace DX01_ShortCircuitTester
             PositionRelayPanel();
         }
 
-        /// <summary>Relay 小視窗僅在 Test 頁顯示。</summary>
+        /// <summary>
+        /// Relay 小視窗顯示條件：僅「Admin 登入」且在 Test 頁顯示。
+        /// USB Relay 手動控制屬維護 / 除錯功能；Operator / 未登入隱藏整區（含標題 / 展開鈕 / ON·OFF / 狀態燈），
+        /// 避免一般 OP 誤操作 Relay；登入 / 登出由 UpdatePermissionsUi 觸發即時切換。
+        /// </summary>
         private void UpdateRelayPanelVisibility()
         {
             if (_relayPanelBox == null)
                 return;
-            _relayPanelBox.Visible = (tabMain.SelectedTab == tabTest);
+            bool admin = _auth != null && _auth.IsAdmin;
+            _relayPanelBox.Visible = admin && (tabMain.SelectedTab == tabTest);
             if (_relayPanelBox.Visible)
                 _relayPanelBox.BringToFront();
         }
