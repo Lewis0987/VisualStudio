@@ -47,6 +47,7 @@ namespace DX01_ShortCircuitTester
             this.lblConnGdm = new System.Windows.Forms.Label();
             this.lblConnRelay = new System.Windows.Forms.Label();
             this.lblVersion = new System.Windows.Forms.Label();
+            this.lblOperator = new System.Windows.Forms.Label();
             this.tabDevice = new System.Windows.Forms.TabPage();
             this.gbRelay = new System.Windows.Forms.GroupBox();
             this.lblRelayInfo = new System.Windows.Forms.Label();
@@ -387,6 +388,7 @@ namespace DX01_ShortCircuitTester
             this.panelFooter.Controls.Add(this.lblInfo);
             this.panelFooter.Controls.Add(this.lblConnGdm);
             this.panelFooter.Controls.Add(this.lblConnRelay);
+            this.panelFooter.Controls.Add(this.lblOperator);
             this.panelFooter.Controls.Add(this.lblVersion);
             this.panelFooter.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelFooter.Location = new System.Drawing.Point(11, 649);
@@ -446,6 +448,20 @@ namespace DX01_ShortCircuitTester
             this.lblVersion.TabIndex = 3;
             this.lblVersion.Text = "Version : V2.1";
             this.lblVersion.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
+            // lblOperator
+            //
+            this.lblOperator.AutoSize = true;
+            this.lblOperator.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblOperator.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
+            this.lblOperator.ForeColor = System.Drawing.Color.Red;
+            this.lblOperator.Location = new System.Drawing.Point(110, 0);
+            this.lblOperator.Name = "lblOperator";
+            this.lblOperator.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
+            this.lblOperator.Size = new System.Drawing.Size(140, 20);
+            this.lblOperator.TabIndex = 4;
+            this.lblOperator.Text = "Operator：未登入";
+            this.lblOperator.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // tabDevice
             // 
@@ -771,6 +787,7 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.Label lblConnGdm;
         private System.Windows.Forms.Label lblConnRelay;
         private System.Windows.Forms.Label lblVersion;
+        private System.Windows.Forms.Label lblOperator;
         private System.Windows.Forms.GroupBox gbGdm;
         private System.Windows.Forms.Label lblGdmPortCap;
         private System.Windows.Forms.ComboBox cbGdmPort;

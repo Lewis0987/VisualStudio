@@ -18,6 +18,13 @@ namespace DX01_ShortCircuitTester
         private TabPage tabLog;
         private RichTextBox rtbLog;
         private Button btnClearLog;
+        private Button btnOpenLogDir;
+
+        // V2.2：Debug Log 檔案寫入（Logs 資料夾，10MB 切檔，90 天清理）
+        private LogFileWriter _logFile;
+
+        // 畫面只保留最近 N 行（避免 UI 變慢）
+        private const int ScreenLogMaxLines = 1000;
 
         // Debug Log 批次更新：背景流程只入佇列，UI Timer 定時批次寫入，避免跨執行緒 / 大量 AppendText 卡頓
         private readonly Queue<LogEventArgs> _logQueue = new Queue<LogEventArgs>();
@@ -34,10 +41,15 @@ namespace DX01_ShortCircuitTester
         private Label lblDevInfoRelay;
 
         private Button btnSettings;
+        private Button btnAccountMgr;
 
         /// <summary>建立 Debug Log 分頁與設備測試區，並把日誌接到設備控制器。</summary>
         private void BuildDebugUi()
         {
+            // 檔案 Log：建立寫入器並清除超過 90 天的舊檔（畫面清除不影響檔案）
+            _logFile = new LogFileWriter();
+            _logFile.CleanupOldLogs(90);
+
             _debugLog = new DebugLog();
             _debugLog.Entry += OnLogEntry;
             if (_meter != null) _meter.Log = _debugLog;
@@ -56,6 +68,10 @@ namespace DX01_ShortCircuitTester
                 catch { }
             };
             logBar.Controls.Add(btnClearLog);
+
+            btnOpenLogDir = new Button { Text = "開啟 Log 資料夾", Location = new Point(116, 5), Size = new Size(140, 28) };
+            btnOpenLogDir.Click += (s, e) => OpenLogFolder();
+            logBar.Controls.Add(btnOpenLogDir);
 
             rtbLog = new RichTextBox
             {
@@ -159,6 +175,18 @@ namespace DX01_ShortCircuitTester
             };
             btnSettings.Click += (s, e) => OpenSettingForm();
             tabDevice.Controls.Add(btnSettings);
+
+            // V2.2：帳號管理（Admin 限定；位於 Settings 頁，測試中隨整頁停用）
+            btnAccountMgr = new Button
+            {
+                Text = "帳號管理",
+                Location = new Point(232, 632),
+                Size = new Size(160, 40),
+                Font = new Font("Microsoft JhengHei UI", 11F),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left
+            };
+            btnAccountMgr.Click += (s, e) => OpenAccountManager();
+            tabDevice.Controls.Add(btnAccountMgr);
         }
 
         /// <summary>
@@ -171,6 +199,12 @@ namespace DX01_ShortCircuitTester
             {
                 if (e == null)
                     return;
+
+                // 檔案：完整寫入（不受畫面 DebugLevel 過濾，確保可完整追溯）
+                if (_logFile != null)
+                    _logFile.Append(string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} [{1}] {2}", e.Time, e.Kind, e.Message));
+
+                // 畫面：依 DebugLevel 過濾後入佇列
                 if (!AllowLog(e.Kind, AppSettings.Current.DebugLevel))
                     return;
 
@@ -240,10 +274,10 @@ namespace DX01_ShortCircuitTester
                 e.Time, prefix, e.Message, Environment.NewLine));
         }
 
-        /// <summary>限制最大行數（MaxDebugLogLines），超過則移除最舊的行。</summary>
+        /// <summary>畫面只保留最近 ScreenLogMaxLines(1000) 行，超過則移除最舊的行（避免 UI 變慢）。</summary>
         private void TrimLog()
         {
-            int max = AppSettings.Current.MaxDebugLogLines;
+            int max = ScreenLogMaxLines;
             if (max <= 0)
                 return;
 
@@ -257,6 +291,23 @@ namespace DX01_ShortCircuitTester
             {
                 rtbLog.Select(0, cut);
                 rtbLog.SelectedText = "";
+            }
+        }
+
+        /// <summary>開啟 Logs 資料夾（不存在則建立）。</summary>
+        private void OpenLogFolder()
+        {
+            if (_auth == null || !_auth.IsAdmin)   // 防護：僅 Admin
+                return;
+            try
+            {
+                string dir = LogFileWriter.LogDirectory;
+                System.IO.Directory.CreateDirectory(dir);
+                System.Diagnostics.Process.Start("explorer.exe", dir);
+            }
+            catch (Exception ex)
+            {
+                MsgBox.Show(this, "開啟失敗", "無法開啟 Log 資料夾：\n" + ex.Message, MessageBoxIcon.Warning, "確定");
             }
         }
 

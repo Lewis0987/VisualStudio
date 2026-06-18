@@ -76,6 +76,15 @@ namespace DX01_ShortCircuitTester.Services
             return (step >= 1 && step <= 10) ? StepWaitMs[step] : 0;
         }
 
+        /// <summary>複製目前設定（供測試開始時快照，使測試中修改參數不影響當前流程）。</summary>
+        public AppSettings Clone()
+        {
+            var c = (AppSettings)MemberwiseClone();
+            if (StepWaitMs != null)
+                c.StepWaitMs = (int[])StepWaitMs.Clone();
+            return c;
+        }
+
         // ===================== 載入 =====================
 
         public static void Load()

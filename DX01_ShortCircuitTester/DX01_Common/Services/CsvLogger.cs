@@ -19,7 +19,7 @@ namespace DX01_ShortCircuitTester.Services
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
 
         private const string Header =
-            "時間,序號,整體判定,步驟,步驟名稱,嘗試,Relay,模式,量測值,單位,下限,上限,步驟判定,RetryCount,ErrorType,ErrorMessage";
+            "時間,序號,工號,整體判定,步驟,步驟名稱,嘗試,Relay,模式,量測值,單位,下限,上限,步驟判定,RetryCount,ErrorType,ErrorMessage";
 
         /// <summary>將一次測試結果（所有步驟）附加寫入當日 CSV。回傳寫入的檔案路徑。</summary>
         public static string Append(TestResult result)
@@ -75,6 +75,7 @@ namespace DX01_ShortCircuitTester.Services
         {
             sb.Append(Csv(row.Time.ToString("yyyy-MM-dd HH:mm:ss"))).Append(',');
             sb.Append(Csv(result.SerialNumber)).Append(',');
+            sb.Append(Csv(result.OperatorId ?? "")).Append(',');
             sb.Append(Csv(result.Judgement)).Append(',');
             sb.Append(row.StepNumber).Append(',');
             sb.Append(Csv(row.StepName)).Append(',');

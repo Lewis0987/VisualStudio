@@ -127,6 +127,10 @@ namespace DX01_ShortCircuitTester.Models
     public sealed class TestResult
     {
         public string SerialNumber { get; set; }
+
+        /// <summary>執行此測試的操作者工號（人員追溯用；不含密碼）。</summary>
+        public string OperatorId { get; set; }
+
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
 

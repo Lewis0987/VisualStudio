@@ -37,12 +37,25 @@ namespace DX01_ShortCircuitTester
         private bool _saved;
         private string _originalSnapshot;
 
-        public SettingForm()
+        private readonly bool _editable;
+
+        public SettingForm() : this(true) { }
+
+        /// <summary>editable=false 時（Operator）僅供檢視：所有輸入停用、隱藏「儲存」。</summary>
+        public SettingForm(bool editable)
         {
+            _editable = editable;
             InitializeComponent();
             BuildUi();
             LoadFromSettings();
             _originalSnapshot = BuildSnapshot();
+
+            if (!_editable)
+            {
+                Text = "參數設定（檢視）";
+                if (_body != null) _body.Enabled = false;   // 所有設定輸入反灰、不可改
+                if (btnSave != null) { btnSave.Visible = false; btnSave.Enabled = false; }
+            }
         }
 
         private void BuildUi()

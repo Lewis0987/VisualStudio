@@ -46,23 +46,53 @@ namespace DX01_ShortCircuitTester.Device
         /// <summary>除錯日誌（可為 null）。</summary>
         public DebugLog Log { get; set; }
 
+        /// <summary>
+        /// 已連線狀態的連線「中途遺失」事件（通訊 I/O 失敗判定斷線時觸發）。
+        /// 連線建立階段（含 *IDN? 驗證失敗）不觸發，避免與連線失敗流程重複。
+        /// 供 UI 即時更新「電表：未連線」與寫 Debug Log。
+        /// </summary>
+        public event EventHandler ConnectionLost;
+
+        private bool _connecting;   // 連線建立中：此期間的釋放不視為「中途斷線」
+
+        // 連線中途遺失：標記為斷線但「不立即 Dispose」舊 socket。
+        // 原因（比照 GDM8261A_Tester2）：若在「線材仍拔除」時 Dispose，FIN 送不到 GDM，
+        // GDM 端舊 session 殘留，重連時新連線會被 RST（TX *CLS 失敗 / 遠端強制關閉）。
+        // 保留舊 socket，待重連 / 中斷時（線材已接回）才 Dispose → FIN 送達 → GDM 釋放舊 session。
+        private bool _linkLost;
+
+        // I/O 序列化鎖：背景心跳輪詢與 UI 操作（連線/中斷/測試指令）不會同時存取 _transport。
+        // lock 為可重入（同執行緒），故 Connect→Send/Query 巢狀取用安全。
+        private readonly object _ioGate = new object();
+
         public bool IsConnected
         {
-            get { return _transport != null && _transport.IsOpen; }
+            get { return !_linkLost && _transport != null && _transport.IsOpen; }
         }
 
         public void Connect()
         {
-            if (IsConnected)
-                return;
+            lock (_ioGate)
+            {
+                if (IsConnected)
+                    return;
 
-            // 不沿用任何殘留 / 失效的舊連線物件（拔線後 TcpClient 可能仍非 null）。
-            CloseTransport();
+                // 不沿用任何殘留 / 失效的舊連線物件（拔線後 TcpClient 可能仍非 null）。
+                CloseTransport();
 
-            if (AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan)
-                ConnectLan();
-            else
-                ConnectSerial();
+                _connecting = true;
+                try
+                {
+                    if (AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan)
+                        ConnectLan();
+                    else
+                        ConnectSerial();
+                }
+                finally
+                {
+                    _connecting = false;
+                }
+            }
         }
 
         /// <summary>
@@ -77,34 +107,36 @@ namespace DX01_ShortCircuitTester.Device
 
             var cfg = AppSettings.Current;
             int retries = Math.Max(1, cfg.ReconnectRetryCount);
-            int delay = Math.Max(0, cfg.ReconnectDelayMs);
+            int delay = Math.Max(500, cfg.ReconnectDelayMs);   // #3 連線前延遲（≥500ms）
             Exception last = null;
 
             for (int attempt = 1; attempt <= retries; attempt++)
             {
-                CloseTransport();                       // 1. Close 舊連線
-                if (delay > 0)
-                    Thread.Sleep(delay);                // 2. 等待 ReconnectDelayMs
+                CloseTransport();           // 不沿用任何舊 Stream / TcpClient（每次全新）
+                Thread.Sleep(delay);        // #3 Disconnect 後 / 重試前延遲，待 GDM 釋放舊 session
 
                 try
                 {
-                    // 3-4. 建立全新 TcpClient 並連線（帶 ConnectTimeoutMs）；不重用任何舊連線物件
+                    // 建立全新 TcpClient 並連線（帶 ConnectTimeoutMs）
                     var t = new TcpTransport(Ip, TcpPort, cfg.ConnectTimeoutMs, cfg.ReadTimeoutMs);
                     t.Open();
                     _transport = t;
                     WriteLog(LogKind.Info, "TcpClient Connect OK  LAN " + Ip + ":" + TcpPort +
                         "  (retry " + attempt + "/" + retries + ")");
 
-                    t.DrainInput();                     // 5. 清空殘留資料
-                    Send("*CLS");                       // 6. *CLS
-                    VerifyIdentity("LAN");              // 7-8. *IDN? 驗證；成功即返回
+                    // #4 連線後稍候再送第一個 SCPI，待 GDM 端就緒
+                    Thread.Sleep(400);
+
+                    // #1 #5 比照 GDM8261A_Tester2：不送 *CLS、不 DrainInput，直接以 *IDN? 驗證
+                    VerifyIdentity("LAN");
                     return;
                 }
                 catch (Exception ex)
                 {
                     last = ex;
                     WriteLog(LogKind.Error, "LAN Connect Failed (retry " + attempt + "/" + retries + "): " + ex.Message);
-                    CloseTransport();                   // 9. 失敗則 Close 並重試
+                    CloseTransport();           // #6 失敗立即完整釋放全部 TCP 資源
+                    delay = Math.Max(1000, delay); // #6 首次失敗後延長延遲（≥1000ms）再以全新連線重試
                 }
             }
 
@@ -156,13 +188,16 @@ namespace DX01_ShortCircuitTester.Device
 
         public void Disconnect()
         {
-            var transport = _transport;
-            _transport = null;
-            if (transport != null)
+            lock (_ioGate)
             {
-                try { transport.Dispose(); }
-                catch { }
-                WriteLog(LogKind.Info, "電表已中斷連線");
+                var transport = _transport;
+                _transport = null;
+                if (transport != null)
+                {
+                    try { transport.Dispose(); }
+                    catch { }
+                    WriteLog(LogKind.Info, "電表已中斷連線");
+                }
             }
         }
 
@@ -239,20 +274,23 @@ namespace DX01_ShortCircuitTester.Device
         /// </summary>
         public bool PingDevice()
         {
-            if (!IsConnected)
-                return false;
+            lock (_ioGate)
+            {
+                if (!IsConnected)
+                    return false;
 
-            try
-            {
-                _transport.WriteLine("*IDN?");
-                _transport.ReadLine();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                WriteLog(LogKind.Error, "心跳偵測失敗，判定斷線: " + ex.Message);
-                DropConnection();
-                return false;
+                try
+                {
+                    _transport.WriteLine("*IDN?");
+                    _transport.ReadLine();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    WriteLog(LogKind.Error, "心跳偵測失敗，判定斷線: " + ex.Message);
+                    MarkLinkLost();   // 保留 socket，待重連時釋放（避免 GDM 舊 session 殘留）
+                    return false;
+                }
             }
         }
 
@@ -284,40 +322,46 @@ namespace DX01_ShortCircuitTester.Device
 
         private void Send(string command)
         {
-            if (!IsConnected)
-                throw new InvalidOperationException("電表尚未連線。");
+            lock (_ioGate)
+            {
+                if (!IsConnected)
+                    throw new InvalidOperationException("電表尚未連線。");
 
-            try
-            {
-                _transport.WriteLine(command);
-                WriteLog(LogKind.Tx, command);
-            }
-            catch (Exception ex)
-            {
-                WriteLog(LogKind.Error, "TX " + command + " 失敗: " + ex.Message);
-                DropConnection(); // 通訊異常立即判定斷線並釋放失效連線
-                throw;
+                try
+                {
+                    _transport.WriteLine(command);
+                    WriteLog(LogKind.Tx, command);
+                }
+                catch (Exception ex)
+                {
+                    WriteLog(LogKind.Error, "TX " + command + " 失敗: " + ex.Message);
+                    MarkLinkLost(); // 判定斷線（保留 socket 至重連時釋放）
+                    throw;
+                }
             }
         }
 
         private string Query(string command)
         {
-            if (!IsConnected)
-                throw new InvalidOperationException("電表尚未連線。");
+            lock (_ioGate)
+            {
+                if (!IsConnected)
+                    throw new InvalidOperationException("電表尚未連線。");
 
-            try
-            {
-                _transport.WriteLine(command);
-                WriteLog(LogKind.Tx, command);
-                string resp = _transport.ReadLine();
-                WriteLog(LogKind.Rx, resp);
-                return resp;
-            }
-            catch (Exception ex)
-            {
-                WriteLog(LogKind.Error, "Query " + command + " 失敗: " + ex.Message);
-                DropConnection(); // 通訊異常立即判定斷線並釋放失效連線
-                throw;
+                try
+                {
+                    _transport.WriteLine(command);
+                    WriteLog(LogKind.Tx, command);
+                    string resp = _transport.ReadLine();
+                    WriteLog(LogKind.Rx, resp);
+                    return resp;
+                }
+                catch (Exception ex)
+                {
+                    WriteLog(LogKind.Error, "Query " + command + " 失敗: " + ex.Message);
+                    MarkLinkLost(); // 判定斷線（保留 socket 至重連時釋放）
+                    throw;
+                }
             }
         }
 
@@ -330,7 +374,29 @@ namespace DX01_ShortCircuitTester.Device
             bool had = _transport != null;
             CloseTransport();
             if (had)
+            {
                 WriteLog(LogKind.Error, "通訊異常，連線已釋放（判定為斷線）");
+                // 已連線後的中途斷線才通知 UI；連線建立階段失敗由 Connect 流程處理
+                if (!_connecting)
+                {
+                    var h = ConnectionLost;
+                    if (h != null) h(this, EventArgs.Empty);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 執行中（已連線）通訊失敗：標記斷線並通知 UI，但「不 Dispose」舊 socket，
+        /// 留待重連 / 中斷時（線材接回）才釋放，避免 GDM 端舊 session 殘留導致重連被 RST。
+        /// </summary>
+        private void MarkLinkLost()
+        {
+            if (_linkLost || _transport == null || _connecting)
+                return;
+            _linkLost = true;
+            WriteLog(LogKind.Error, "通訊異常，判定為斷線（連線物件保留至重連時釋放）");
+            var h = ConnectionLost;
+            if (h != null) h(this, EventArgs.Empty);
         }
 
         /// <summary>完整釋放底層連線（NetworkStream/TcpClient 或序列埠）並清為 null，不寫 Log。</summary>
@@ -338,6 +404,7 @@ namespace DX01_ShortCircuitTester.Device
         {
             var transport = _transport;
             _transport = null;
+            _linkLost = false;
             if (transport != null)
             {
                 try { transport.Dispose(); }

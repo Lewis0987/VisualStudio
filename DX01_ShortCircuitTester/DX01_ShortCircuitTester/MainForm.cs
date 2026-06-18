@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO.Ports;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.ComponentModel;
 using DX01_ShortCircuitTester.Device;
@@ -31,11 +33,18 @@ namespace DX01_ShortCircuitTester
         private Button btnStop;
         private bool _userStopped;
 
+        // V2.2：員工登入 / 權限；btnLogout 於 BuildBarcodeArea 建立（登入改為自動觸發，無登入按鈕）
+        private OperatorAuth _auth;
+        private Button btnLogout;
+
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
 
         // 避免同一次斷線重複跳出「LAN 連線中斷」提示；連線成功後重置
         private bool _lanLostShown;
+
+        // V2.2：曾發生 LAN 中途斷線（供下次連線成功時記錄 Reconnect Success）
+        private bool _lanWasLost;
 
         // USB Relay 是否被偵測到（由背景監控更新；不代表已連線）
         private bool _relayPresent;
@@ -47,7 +56,7 @@ namespace DX01_ShortCircuitTester
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
 
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
-        public const string Version = "V2.1";
+        public const string Version = "V2.2";
 
         /// <summary>Power ON 檢查門檻：量測電壓 &gt;= 此值視為已開機。</summary>
         private const double PowerOnMinVoltage = 1.0;
@@ -78,6 +87,10 @@ namespace DX01_ShortCircuitTester
         // USB Relay 背景監控：每 1 秒偵測 VID/PID 插拔，自動連線 / 斷線
         private System.Windows.Forms.Timer _relayMonitorTimer;
 
+        // V2.2：LAN 背景連線監控（每 GdmMonitorIntervalMs 送一次 *IDN? 偵測連線存活）
+        private System.Windows.Forms.Timer _heartbeatTimer;
+        private bool _heartbeatBusy;
+
         public MainForm()
         {
             InitializeComponent();
@@ -89,6 +102,10 @@ namespace DX01_ShortCircuitTester
                 return;
 
             AppSettings.Load();
+
+            // V2.2：載入員工帳號（首次執行自動建立預設 Admin 00000000）
+            _auth = new OperatorAuth();
+            _auth.Load();
 
             // 鮑率選項
             cbGdmBaud.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
@@ -108,6 +125,8 @@ namespace DX01_ShortCircuitTester
             // 自動聚焦：啟動完成、切回 Test 頁
             this.Shown += (s, ev) => FocusBarcode();
             tabMain.SelectedIndexChanged += (s, ev) => { if (tabMain.SelectedTab == tabTest) FocusBarcode(); };
+            // V2.2：未登入時切到 Settings / Debug Log 先驗證；取消則留在原頁
+            tabMain.Selecting += TabMain_Selecting;
 
             _okMsgTimer = new System.Windows.Forms.Timer { Interval = Math.Max(1, AppSettings.Current.PopupSeconds) * 1000 };
             _okMsgTimer.Tick += (s, ev) => { _okMsgTimer.Stop(); lblBarcodeMsg.Text = ""; };
@@ -133,10 +152,16 @@ namespace DX01_ShortCircuitTester
             BuildRelayPanel();
             UpdateRelayPanelState();
 
-            // V2.1：比照 GDM-8261A-Tester-2，移除待機 LAN 背景 *IDN? 心跳監控。
-            // 原因：拔線時背景 ping 會在「線材仍拔除」時就把連線 DropConnection 拆除，
-            // FIN 送不到 GDM，導致 GDM 端 session 卡住、需重開電表才能重連。
-            // 改為僅在「連線時」與「測試流程中」偵測斷線（與參考專案一致）。
+            // V2.2：依登入狀態套用權限 / Operator 顯示
+            UpdatePermissionsUi();
+
+            // V2.2：LAN 背景連線監控（待機時每秒送 *IDN? 偵測斷線；非同步執行避免 UI 卡頓）
+            _heartbeatTimer = new System.Windows.Forms.Timer
+            {
+                Interval = Math.Max(250, AppSettings.Current.GdmMonitorIntervalMs)
+            };
+            _heartbeatTimer.Tick += Heartbeat_Tick;
+            _heartbeatTimer.Start();
 
             // USB Relay 背景偵測：每 1 秒偵測插拔（只更新狀態，不自動連線）
             _relayMonitorTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -145,6 +170,29 @@ namespace DX01_ShortCircuitTester
 
             tabMain.SelectedTab = tabTest;
             txtBarcode.Focus();
+        }
+
+        /// <summary>
+        /// LAN 背景連線監控：待機時每隔 GdmMonitorIntervalMs 送一次 *IDN? 偵測連線存活。
+        /// 在背景執行緒執行（避免 UI 卡頓）；失敗時 PingDevice 內 DropConnection → ConnectionLost
+        /// → OnGdmConnectionLost 即時更新「電表：未連線」+ Debug Log。測試中不介入（流程自行偵測）。
+        /// 不自動重連，需使用者手動按「連線」。
+        /// </summary>
+        private async void Heartbeat_Tick(object sender, EventArgs e)
+        {
+            if (_running || _heartbeatBusy) return;
+            if (_meter == null || !_meter.UseLan || !_meter.IsConnected) return;
+
+            _heartbeatBusy = true;
+            try
+            {
+                await Task.Run(() => _meter.PingDevice());
+            }
+            catch { /* PingDevice 內已處理例外 */ }
+            finally
+            {
+                _heartbeatBusy = false;
+            }
         }
 
         /// <summary>
@@ -243,10 +291,14 @@ namespace DX01_ShortCircuitTester
                 Margin = new Padding(8, 0, 0, 0),
                 Anchor = AnchorStyles.Left | AnchorStyles.Right
             };
+            // V2.2：登出（左，登入時才顯示）＋ 測試控制 暫停 / 停止（右）。登入改為自動觸發，無登入按鈕。
+            btnLogout = new Button { Text = "登出", Size = new Size(64, boxH), Visible = false, Margin = new Padding(0, 0, 12, 0) };
+            btnLogout.Click += BtnLogout_Click;
             btnPause = new Button { Text = "暫停", Size = new Size(72, boxH), Enabled = false, Margin = new Padding(0, 0, 4, 0) };
             btnStop = new Button { Text = "停止", Size = new Size(72, boxH), Enabled = false, Margin = new Padding(0) };
             btnPause.Click += BtnPause_Click;
             btnStop.Click += BtnStop_Click;
+            ctrlPanel.Controls.Add(btnLogout);
             ctrlPanel.Controls.Add(btnPause);
             ctrlPanel.Controls.Add(btnStop);
             panelTop.Controls.Add(ctrlPanel, 2, 0);
@@ -319,6 +371,9 @@ namespace DX01_ShortCircuitTester
 
             // 集中：任何 Relay 切換（連線復位 / 設備測試 / 流程）都同步更新 UI
             _relay.RelayChanged += OnRelayChanged;
+
+            // V2.2：電表通訊中途斷線 → 即時更新 UI 並寫 Debug Log（比照 GDM8261A_Tester2 DropConnection）
+            _meter.ConnectionLost += OnGdmConnectionLost;
 
             _flow = new DX01TestFlow(_relay, _meter);
             _flow.StepStarted += Flow_StepStarted;
@@ -413,14 +468,86 @@ namespace DX01_ShortCircuitTester
         /// <summary>開啟參數設定對話框，關閉後刷新相關 UI。</summary>
         private void OpenSettingForm()
         {
+            // V2.2：取消 Settings 權限限制 — 未登入 / Operator / Admin 皆可查看與修改 / 儲存
+            AppSettings before = AppSettings.Current.Clone();   // 開啟前快照，供儲存後比對差異
+            DialogResult dr;
             using (var f = new SettingForm())
             {
-                f.ShowDialog(this);
+                dr = f.ShowDialog(this);
             }
+            if (dr == DialogResult.OK)
+                LogSettingsDiff(before, AppSettings.Current);   // 有按儲存才比對 / 寫 Log
+
             LoadConnectionUiFromSettings();
             UpdateGdmInterfaceUi();
             ApplyUiSettings();
             UpdateConnStatus();
+        }
+
+        /// <summary>儲存後比對設定差異並寫入 Debug Log（僅記變更項；含修改者；不含任何密碼）。</summary>
+        private void LogSettingsDiff(AppSettings o, AppSettings n)
+        {
+            if (_debugLog == null || o == null || n == null)
+                return;
+
+            var lines = new List<string>();
+            foreach (FieldInfo f in typeof(AppSettings).GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                object ov = f.GetValue(o), nv = f.GetValue(n);
+
+                if (f.FieldType == typeof(int[]))   // StepWaitMs[1..10]
+                {
+                    var a = ov as int[];
+                    var b = nv as int[];
+                    if (a != null && b != null)
+                    {
+                        int len = Math.Min(a.Length, b.Length);
+                        for (int i = 1; i < len; i++)
+                            if (a[i] != b[i])
+                                lines.Add("Step" + i + "WaitMs : " + a[i] + " -> " + b[i]);
+                    }
+                    continue;
+                }
+
+                if (!object.Equals(ov, nv))
+                    lines.Add(FriendlySettingName(f.Name) + " : " +
+                              FmtSetting(f.Name, ov) + " -> " + FmtSetting(f.Name, nv));
+            }
+
+            if (lines.Count == 0)
+                return;   // 舊值 = 新值 → 不寫入
+
+            _debugLog.Write(LogKind.Info, "[Settings Changed]");
+            _debugLog.Write(LogKind.Info, "User : " + SettingsActor());
+            foreach (string l in lines)
+                _debugLog.Write(LogKind.Info, l);
+        }
+
+        /// <summary>修改者顯示：Admin 00000000 / OP 11506023 / 未登入。</summary>
+        private string SettingsActor()
+        {
+            if (_auth != null && _auth.IsLoggedIn)
+                return (_auth.IsAdmin ? "Admin " : "OP ") + _auth.OperatorId;
+            return "未登入";
+        }
+
+        private static string FriendlySettingName(string name)
+        {
+            switch (name)
+            {
+                case "DcVoltageRange": return "DC Voltage Range";
+                case "BarcodeRegex": return "Barcode Regex";
+                case "RelaySwitchDelayMs": return "RelaySwitchDelayMs";
+                case "ReconnectRetryCount": return "RetryCount";
+                default: return name;
+            }
+        }
+
+        private static string FmtSetting(string name, object v)
+        {
+            if (v == null) return "";
+            if (name == "DcVoltageRange") return v + "V";
+            return Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         #region 設備設定頁
@@ -490,6 +617,9 @@ namespace DX01_ShortCircuitTester
             }
             catch (Exception ex)
             {
+                if (lan && _debugLog != null)
+                    _debugLog.Write(LogKind.Error, "Reconnect Failed : " + ex.Message);
+
                 if (lan)
                     MsgBox.Show(this, "GDM LAN 連線失敗",
                         "無法重新連線到 GDM-8261A。\n\n" +
@@ -515,7 +645,8 @@ namespace DX01_ShortCircuitTester
                 _lanLostShown = false; // 連線成功 → 重置斷線提示旗標
                 // 連線成功不跳 Popup，只寫 Debug Log（UI 已由 UpdateConnStatus 顯示綠色已連線）
                 if (_debugLog != null)
-                    _debugLog.Write(LogKind.Info, "GDM connected.");
+                    _debugLog.Write(LogKind.Info, _lanWasLost ? "Reconnect Success" : "LAN Connected");
+                _lanWasLost = false;
             }
         }
 
@@ -855,6 +986,13 @@ namespace DX01_ShortCircuitTester
             if (_running)
                 return;
 
+            // V2.2：未登入禁止測試 → 先跳登入視窗；仍未登入則中止
+            if (!_auth.IsLoggedIn)
+            {
+                if (!PromptLogin())
+                    return;
+            }
+
             if (!_meter.IsConnected)
             {
                 MsgBox.Show(this, "電表未連線", "電表尚未連線，請先連線 GDM-8261A。", MessageBoxIcon.Warning, "確定");
@@ -880,6 +1018,14 @@ namespace DX01_ShortCircuitTester
 
             // 開始測試 → 立即清空條碼輸入框（原始條碼保留於序號列 / CSV / Debug Log）
             txtBarcode.Clear();
+
+            // V2.2：Debug Log 記錄操作者 / 條碼 / 開始測試（不記錄密碼）
+            if (_debugLog != null)
+            {
+                _debugLog.Write(LogKind.Info, "Operator : " + _auth.OperatorId);
+                _debugLog.Write(LogKind.Info, "Barcode : " + sn);
+                _debugLog.Write(LogKind.Info, "Start Test");
+            }
 
             // ── 測試開始前：產品 Power ON 檢查（避免到 Step7 才發現產品未開機）──
             SetRunningState(true);
@@ -945,7 +1091,7 @@ namespace DX01_ShortCircuitTester
             }
 
             // ── Power ON → 進入正式測試 ──
-            // 重置畫面（Return to Step1），並固定新增「序號」列（粗體、不計入統計）
+            // 重置畫面（Return to Step1），固定新增「序號」列（工號不顯示於表格，僅記於 Debug Log / 底部）
             dgvResults.Rows.Clear();
             AddSerialRow(sn);
             lblMeasure.Text = "---";
@@ -994,6 +1140,10 @@ namespace DX01_ShortCircuitTester
 
         private void OnTestFinished(TestResult result)
         {
+            // V2.2：紀錄操作者工號於結果（人員追溯；不含密碼）
+            if (string.IsNullOrEmpty(result.OperatorId) && _auth != null)
+                result.OperatorId = _auth.OperatorId;
+
             // 測試中 USB Relay 被拔除（背景監控取消流程）→ 視為 Relay 異常（而非單純中止）
             if (_relayLostDuringTest && !result.HasAnomaly)
             {
@@ -1016,6 +1166,15 @@ namespace DX01_ShortCircuitTester
                 SetResult("PASS", Color.White, OkGreen);
             else
                 SetResult("NG", Color.White, NgRed);
+
+            // V2.2：Debug Log 記錄操作者與最終結果
+            if (_debugLog != null)
+            {
+                string verdict = result.Aborted ? (_userStopped ? "STOP" : "ABORT")
+                    : (result.HasAnomaly ? "NG (設備異常)" : (result.IsPass ? "PASS" : "NG"));
+                _debugLog.Write(LogKind.Info, "Operator : " + result.OperatorId);
+                _debugLog.Write(LogKind.Info, "Result : " + verdict);
+            }
 
             string logFile = "";
             try
@@ -1142,6 +1301,25 @@ namespace DX01_ShortCircuitTester
             UpdateRelayPanelVisual(code);   // 同步右下角 Relay 小視窗燈號
         }
 
+        /// <summary>電表通訊中途斷線（任何 I/O 失敗）：即時更新 UI 為未連線並寫 Debug Log。可能在背景執行緒。</summary>
+        private void OnGdmConnectionLost(object sender, EventArgs e)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action(() => OnGdmConnectionLost(sender, e))); } catch { }
+                return;
+            }
+
+            _lanWasLost = true;
+            if (_debugLog != null)
+            {
+                _debugLog.Write(LogKind.Error, "[LAN Disconnect] GDM8261A Connection Lost");
+                _debugLog.Write(LogKind.Error, "LAN Disconnected");
+            }
+            UpdateConnStatus();   // 立即更新「電表：未連線」（紅）
+        }
+
         /// <summary>同步 Test 頁「Relay 狀態」顯示（執行緒安全）。</summary>
         private void UpdateRelayDisplay(string code)
         {
@@ -1219,20 +1397,143 @@ namespace DX01_ShortCircuitTester
         {
             _running = running;
             txtBarcode.Enabled = !running;
-            SetTestingUiLock(running);    // 鎖定 Settings 參數 + Debug Log 清除
+            UpdatePermissionsUi();        // 套用 登入/角色/測試中 權限與鎖定
             UpdateRelayPanelState();      // 測試中停用 Relay 小視窗手動控制
         }
 
         /// <summary>
-        /// 測試執行中（含暫停）鎖定 UI，避免修改參數或清除紀錄造成結果不一致：
-        /// Settings(設備設定)頁全部反灰（含連線參數 / Save / Apply / 設定按鈕）、Debug Log「清除 Log」停用。
-        /// 測試結束（PASS / FAIL / 停止 / 異常 / 斷線）自動恢復。Test 頁與 Stop 按鈕不受影響。
+        /// V2.2 依「登入狀態 + 角色 + 是否測試中」統一套用權限與鎖定（含 Operator 顯示）：
+        /// - Settings(設備設定)頁：僅 Admin 且非測試中可編輯；未登入 / Operator / 測試中 一律反灰。
+        /// - Debug Log「清除 Log」：測試中停用。
+        /// - 登入：未登入且非測試中可用；登出：已登入且非測試中可用。
+        /// 測試 / 暫停期間視為測試中（_running=true）→ Settings、清除 Log、登入、登出 皆鎖定。
         /// </summary>
-        private void SetTestingUiLock(bool isTesting)
+        private void UpdatePermissionsUi()
         {
-            tabDevice.Enabled = !isTesting;                 // Settings 頁所有設定控制項
-            if (btnClearLog != null)
-                btnClearLog.Enabled = !isTesting;           // Debug Log 清除按鈕
+            bool testing = _running;
+            bool loggedIn = _auth != null && _auth.IsLoggedIn;
+            bool admin = _auth != null && _auth.IsAdmin;
+
+            // V2.2：取消 Settings 權限與測試鎖定 — 任何人（含未登入 / 測試中）皆可查看與修改 Settings。
+            // 測試中修改僅影響下一次測試（流程已對設定快照）。連線等操作不在此鎖定。
+            tabDevice.Enabled = true;
+
+            // 清除 Log：僅 Admin 可用（未登入 / Operator 停用）；測試中停用
+            if (btnClearLog != null) btnClearLog.Enabled = admin && !testing;
+
+            // 開啟 Log 資料夾：僅 Admin 顯示（未登入 / Operator 隱藏）；測試中停用
+            if (btnOpenLogDir != null)
+            {
+                btnOpenLogDir.Visible = admin;
+                btnOpenLogDir.Enabled = admin && !testing;
+            }
+
+            // 登出：登入後才顯示；測試中停用。（無登入按鈕，登入改自動觸發）
+            if (btnLogout != null)
+            {
+                btnLogout.Visible = loggedIn;
+                btnLogout.Enabled = loggedIn && !testing;
+            }
+
+            // 帳號管理：僅 Admin 顯示（未登入 / Operator 隱藏）；測試中停用
+            if (btnAccountMgr != null)
+            {
+                btnAccountMgr.Visible = admin;
+                btnAccountMgr.Enabled = admin && !testing;
+            }
+
+            if (lblOperator != null)
+            {
+                // 未登入：OP：未登入 / Operator：OP：工號 / Admin：Admin：工號
+                if (!loggedIn)
+                    lblOperator.Text = "OP：未登入";
+                else if (admin)
+                    lblOperator.Text = "Admin：" + _auth.OperatorId;
+                else
+                    lblOperator.Text = "OP：" + _auth.OperatorId;
+                lblOperator.ForeColor = loggedIn ? OkGreen : Color.Red;
+            }
+        }
+
+        /// <summary>未登入時切換到 Settings / Debug Log 先跳權限驗證；取消則不切換。</summary>
+        private void TabMain_Selecting(object sender, TabControlCancelEventArgs e)
+        {
+            if (_auth != null && _auth.IsLoggedIn) return;
+            if (e.TabPage == tabDevice || e.TabPage == tabLog)
+            {
+                if (!PromptLogin())
+                    e.Cancel = true;   // 未登入 / 取消 → 留在原頁
+            }
+        }
+
+        /// <summary>顯示登入視窗；成功則寫 Debug Log 並更新權限。回傳是否已登入。</summary>
+        private bool PromptLogin()
+        {
+            using (var f = new LoginForm(_auth))
+            {
+                f.ShowDialog(this);
+            }
+            if (_auth.IsLoggedIn)
+            {
+                string roleName = _auth.IsAdmin ? "Admin" : "Operator";
+                if (_debugLog != null)
+                    _debugLog.Write(LogKind.Info, roleName + " Login Success : " + _auth.OperatorId);  // 不含密碼
+                UpdatePermissionsUi();
+                // 登入成功 Toast（不跳 MessageBox、不阻擋操作）
+                Toast.Show(this, roleName + " 登入成功：" + _auth.OperatorId);
+
+                // Admin 仍使用預設密碼 → 稍後提示修改（接在登入成功 Toast 之後）
+                if (_auth.IsAdmin && _auth.UsingDefaultPassword)
+                {
+                    var hintTimer = new System.Windows.Forms.Timer { Interval = 2600 };
+                    hintTimer.Tick += (s, e) =>
+                    {
+                        hintTimer.Stop();
+                        hintTimer.Dispose();
+                        Toast.Show(this, "建議立即修改預設管理員密碼。", 3000, 900);
+                    };
+                    hintTimer.Start();
+                }
+            }
+            return _auth.IsLoggedIn;
+        }
+
+        private void BtnLogout_Click(object sender, EventArgs e)
+        {
+            if (_running || !_auth.IsLoggedIn) return;
+            string who = _auth.OperatorId;
+            _auth.Logout();   // 清空 CurrentOperatorId / CurrentRole
+            if (_debugLog != null)
+                _debugLog.Write(LogKind.Info, "Operator Logout : " + who);
+
+            // 登出清空：測試紀錄(DataGridView) / 條碼 / 目前測試結果（保留 Debug Log、連線、Settings）
+            dgvResults.Rows.Clear();
+            txtBarcode.Clear();
+            _testedBarcodes.Clear();
+            SetResult("待測", Color.DimGray, Color.Gainsboro);
+            ResetLiveStatus();
+            UpdateSummaryStats(null);
+
+            UpdatePermissionsUi();
+            Toast.Show(this, "登出成功");
+        }
+
+        /// <summary>開啟 Admin 帳號管理對話框（僅 Admin；測試中此入口隨 Settings 頁停用）。</summary>
+        private void OpenAccountManager()
+        {
+            if (_running) return;
+            if (_auth == null || !_auth.IsAdmin)
+            {
+                MsgBox.Show(this, "權限不足", "僅 Admin 可開啟帳號管理。", MessageBoxIcon.Warning, "確定");
+                return;
+            }
+
+            using (var f = new AccountManagerForm(_auth,
+                msg => { if (_debugLog != null) _debugLog.Write(LogKind.Info, msg); }))
+            {
+                f.ShowDialog(this);
+            }
+            UpdatePermissionsUi();
         }
 
         /// <summary>
@@ -1275,6 +1576,13 @@ namespace DX01_ShortCircuitTester
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            if (_heartbeatTimer != null)
+            {
+                _heartbeatTimer.Stop();
+                _heartbeatTimer.Dispose();
+                _heartbeatTimer = null;
+            }
+
             if (_relayMonitorTimer != null)
             {
                 _relayMonitorTimer.Stop();

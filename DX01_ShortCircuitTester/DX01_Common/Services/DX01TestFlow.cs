@@ -73,7 +73,9 @@ namespace DX01_ShortCircuitTester.Services
             _meter = meter;
         }
 
-        private static AppSettings Cfg { get { return AppSettings.Current; } }
+        // 測試開始時對設定做快照：測試中即使修改 / 儲存 Settings，也只影響下一次測試。
+        private AppSettings _cfgSnapshot;
+        private AppSettings Cfg { get { return _cfgSnapshot ?? AppSettings.Current; } }
 
         private void LogInfo(string msg)
         {
@@ -102,6 +104,7 @@ namespace DX01_ShortCircuitTester.Services
 
             RaiseStatus("測試中…");
             ResetPause();   // 確保不殘留上一輪的暫停狀態
+            _cfgSnapshot = AppSettings.Current.Clone();   // 快照設定：測試中改參數只影響下一次測試
 
             try
             {
@@ -474,6 +477,7 @@ namespace DX01_ShortCircuitTester.Services
             catch { /* 設備已斷線等情況忽略 */ }
 
             result.EndTime = DateTime.Now;
+            _cfgSnapshot = null;   // 釋放本次快照（下一次測試開始時重新擷取）
             RaiseStatus(result.Aborted ? "已中止" : (result.IsPass ? "測試完成：OK" : "測試完成：NG"));
             return result;
         }
