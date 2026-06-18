@@ -106,43 +106,46 @@ namespace DX01_ShortCircuitTester.Device
                 throw new InvalidOperationException("尚未輸入 IP 位址。");
 
             var cfg = AppSettings.Current;
-            int retries = Math.Max(1, cfg.ReconnectRetryCount);
-            int delay = Math.Max(500, cfg.ReconnectDelayMs);   // #3 連線前延遲（≥500ms）
+            const int maxRetries = 3;                              // #8 最多 3 次
+            int preDelay = Math.Max(1000, cfg.ReconnectDelayMs);   // #4 連線前延遲（≥1000ms）
             Exception last = null;
 
-            for (int attempt = 1; attempt <= retries; attempt++)
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                CloseTransport();           // 不沿用任何舊 Stream / TcpClient（每次全新）
-                Thread.Sleep(delay);        // #3 Disconnect 後 / 重試前延遲，待 GDM 釋放舊 session
+                // #1 每次完整釋放舊 TcpClient / NetworkStream（不沿用任何舊 Stream / Writer）
+                CloseTransport();
+                WriteLog(LogKind.Info, "LAN Reconnect [" + attempt + "/" + maxRetries + "] Dispose old + wait " + preDelay + "ms");
+                Thread.Sleep(preDelay);          // #4 連線前延遲，待 GDM 釋放舊 session
 
                 try
                 {
-                    // 建立全新 TcpClient 並連線（帶 ConnectTimeoutMs）
+                    // #3 每次都建立全新 TcpClient
                     var t = new TcpTransport(Ip, TcpPort, cfg.ConnectTimeoutMs, cfg.ReadTimeoutMs);
                     t.Open();
                     _transport = t;
-                    WriteLog(LogKind.Info, "TcpClient Connect OK  LAN " + Ip + ":" + TcpPort +
-                        "  (retry " + attempt + "/" + retries + ")");
+                    WriteLog(LogKind.Info, "TcpClient Connect OK  LAN " + Ip + ":" + TcpPort + "  [" + attempt + "/" + maxRetries + "]");
 
-                    // #4 連線後稍候再送第一個 SCPI，待 GDM 端就緒
-                    Thread.Sleep(400);
+                    // #5 連線成功後延遲再送第一個指令，待 GDM 端就緒
+                    Thread.Sleep(500);
 
-                    // #1 #5 比照 GDM8261A_Tester2：不送 *CLS、不 DrainInput，直接以 *IDN? 驗證
+                    // #6 #7 第一個指令用 *IDN? 驗證（不送 *CLS）
+                    WriteLog(LogKind.Info, "Verify *IDN? ...");
                     VerifyIdentity("LAN");
+                    WriteLog(LogKind.Info, "LAN Connected (verified) [" + attempt + "/" + maxRetries + "]");
                     return;
                 }
                 catch (Exception ex)
                 {
                     last = ex;
-                    WriteLog(LogKind.Error, "LAN Connect Failed (retry " + attempt + "/" + retries + "): " + ex.Message);
-                    CloseTransport();           // #6 失敗立即完整釋放全部 TCP 資源
-                    delay = Math.Max(1000, delay); // #6 首次失敗後延長延遲（≥1000ms）再以全新連線重試
+                    WriteLog(LogKind.Error, "LAN Connect Failed [" + attempt + "/" + maxRetries + "]: " + ex.Message);
+                    CloseTransport();           // #6 #8 失敗立即完整釋放全部 TCP 資源，再以全新連線重試
+                    WriteLog(LogKind.Info, "Disposed all TCP resources after failure");
                 }
             }
 
+            // #8 三次仍失敗
             throw new InvalidOperationException(
-                "GDM LAN 連線失敗（已重試 " + retries + " 次）：" +
-                (last != null ? last.Message : "未知錯誤"), last);
+                "LAN 重新連線失敗，請確認網路線或重啟電表後再試。", last);
         }
 
         /// <summary>序列埠連線：開啟後同樣以 *IDN? 驗證。</summary>

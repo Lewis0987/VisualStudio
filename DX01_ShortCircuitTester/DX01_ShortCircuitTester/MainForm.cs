@@ -608,11 +608,12 @@ namespace DX01_ShortCircuitTester
 
             bool lan = rbLan.Checked;
             bool ok = false;
+            _heartbeatTimer?.Stop();   // #2 重連期間停止背景監控 Task，避免干擾
             try
             {
                 ApplyGdmConnectionSettings();
-                _meter.Disconnect();   // 釋放任何舊連線，確保重連一定建立新的 TcpClient
-                _meter.Connect();
+                _meter.Disconnect();   // 釋放任何舊連線（線材已接回 → FIN → GDM 釋放舊 session）
+                _meter.Connect();      // 內部：每次 new TcpClient、*IDN? 驗證、失敗完整釋放重試最多 3 次
                 ok = _meter.IsConnected;
             }
             catch (Exception ex)
@@ -621,21 +622,15 @@ namespace DX01_ShortCircuitTester
                     _debugLog.Write(LogKind.Error, "Reconnect Failed : " + ex.Message);
 
                 if (lan)
-                    MsgBox.Show(this, "GDM LAN 連線失敗",
-                        "無法重新連線到 GDM-8261A。\n\n" +
-                        "請確認：\n" +
-                        "1. LAN 線是否已接回\n" +
-                        "2. IP / Port 是否正確\n" +
-                        "3. 電表 LAN 功能是否啟用\n" +
-                        "4. 等待 3 秒後再試一次\n" +
-                        "5. 若仍無法連線，請重新開啟 GDM-8261A 設備後再重新連線\n\n" +
-                        "可能原因：\n" +
-                        "- 網路連線異常\n" +
-                        "- 電表 TCP 通訊未正常釋放\n" +
-                        "- 設備端通訊狀態卡住",
+                    MsgBox.Show(this, "LAN 連線失敗",
+                        "LAN 重新連線失敗，請確認網路線或重啟電表後再試。",
                         MessageBoxIcon.Error, "確定");
                 else
                     MsgBox.Show(this, "錯誤", "電表連線失敗:\n" + ex.Message, MessageBoxIcon.Error, "確定");
+            }
+            finally
+            {
+                _heartbeatTimer?.Start();   // 恢復背景監控
             }
 
             UpdateConnStatus();
