@@ -1446,6 +1446,17 @@ namespace DX01_ShortCircuitTester
                 btnAccountMgr.Enabled = admin && !testing;
             }
 
+            // V2.3 角色 UI 顯示：
+            //   工程 / 管理功能（設備測試 / 設備資訊 / 參數設定）僅 Admin 可見。
+            if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
+            if (gbDevInfo != null) gbDevInfo.Visible = admin;       // GDM Identify / Relay VID/PID
+            if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定
+            //   分頁：OP 登入後只保留 Test；未登入（登入入口）與 Admin 顯示 Settings / Debug Log。
+            //   （底部「電表 / Relay 連線狀態」恆顯示，OP 測試時仍可得知設備連線。）
+            bool showAdminTabs = admin || !loggedIn;
+            SetTabVisible(tabDevice, showAdminTabs);   // 設備設定（Settings）整個分頁
+            SetTabVisible(tabLog, showAdminTabs);      // Debug Log 整個分頁
+
             if (lblOperator != null)
             {
                 // 未登入：OP：未登入 / Operator：OP：工號 / Admin：Admin：工號
@@ -1460,6 +1471,27 @@ namespace DX01_ShortCircuitTester
 
             // 登入 / 登出即時切換右下角 USB Relay 控制區（僅 Admin 顯示）
             UpdateRelayPanelVisibility();
+        }
+
+        /// <summary>
+        /// 顯示 / 隱藏整個分頁（TabPage 無可靠 Visible，需自 TabControl 移除 / 加回）。
+        /// 隱藏時若正位於該頁，先切回 Test 頁。加回順序：先 tabDevice、後 tabLog（呼叫端依此順序呼叫）。
+        /// </summary>
+        private void SetTabVisible(TabPage tab, bool visible)
+        {
+            if (tabMain == null || tab == null) return;
+
+            bool present = tabMain.TabPages.Contains(tab);
+            if (visible && !present)
+            {
+                tabMain.TabPages.Add(tab);
+            }
+            else if (!visible && present)
+            {
+                if (tabMain.SelectedTab == tab)
+                    tabMain.SelectedTab = tabTest;
+                tabMain.TabPages.Remove(tab);
+            }
         }
 
         /// <summary>未登入時切換到 Settings / Debug Log 先跳權限驗證；取消則不切換。</summary>
