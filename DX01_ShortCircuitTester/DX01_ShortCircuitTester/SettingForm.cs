@@ -22,12 +22,18 @@ namespace DX01_ShortCircuitTester
         private TextBox txtIRUpper, txtOLValue;
         // 4. 電壓
         private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper, txtDcVoltageRange;
+        // 4b. V2.3 Power ON/OFF 自動偵測門檻
+        private TextBox txtPowerOnThreshold, txtPowerOffThreshold, txtPowerPollIntervalMs, txtPowerWaitLogIntervalSec;
+        // 4c. V2.3 Debug：等待 Power 提示是否顯示「忽略」按鈕
+        private ComboBox cbEnablePowerCheckBypass;
         // 5. 電流
         private TextBox txtCurrentMin, txtCurrentMax;
         // 6. Step 等待
         private readonly TextBox[] _stepBoxes = new TextBox[11];
         // 7. UI / 執行
         private TextBox txtPopupSeconds, txtStepFontSize, txtPollIntervalMs, txtReadTimeoutMs, txtRelaySwitchDelayMs;
+        // 7b. V2.3 NG 重試（時間窗）
+        private TextBox txtNgRetryTimeoutMs, txtNgRetryIntervalMs;
 
         private Button btnSave, btnCancel;
 
@@ -96,6 +102,13 @@ namespace DX01_ShortCircuitTester
             txtVoltIsoUpper = TxtRow("VoltIsoUpper(V)  → step9/10");
             txtDcVoltageRange = TxtRow("DC Voltage Range(V)");
 
+            Header("4b. Power 自動偵測門檻 (V2.3)");
+            txtPowerOnThreshold = TxtRow("Power ON 門檻 (V)");
+            txtPowerOffThreshold = TxtRow("Power OFF 門檻 (V)");
+            txtPowerPollIntervalMs = TxtRow("Power 偵測間隔 (ms)");
+            txtPowerWaitLogIntervalSec = TxtRow("Power 等待 Log 間隔 (s)");
+            cbEnablePowerCheckBypass = ComboRow("顯示「忽略」按鈕 (Debug)", new[] { "true", "false" });
+
             Header("5. 電流條件 (保留)");
             txtCurrentMin = TxtRow("CurrentMin(A)");
             txtCurrentMax = TxtRow("CurrentMax(A)");
@@ -110,6 +123,10 @@ namespace DX01_ShortCircuitTester
             txtPollIntervalMs = TxtRow("PollIntervalMs");
             txtReadTimeoutMs = TxtRow("ReadTimeoutMs");
             txtRelaySwitchDelayMs = TxtRow("RelaySwitchDelayMs");
+
+            Header("7b. NG 重試時間窗 (V2.3)");
+            txtNgRetryTimeoutMs = TxtRow("NG Retry Timeout (ms)");
+            txtNgRetryIntervalMs = TxtRow("NG Retry Interval (ms)");
         }
 
         private void Header(string text)
@@ -168,6 +185,13 @@ namespace DX01_ShortCircuitTester
             txtVoltIsoUpper.Text = Dbl(c.Step9PPlusToCaseMax);
             txtDcVoltageRange.Text = Dbl(c.DcVoltageRange);
 
+            txtPowerOnThreshold.Text = Dbl(c.PowerOnThreshold);
+            txtPowerOffThreshold.Text = Dbl(c.PowerOffThreshold);
+            txtPowerPollIntervalMs.Text = c.PowerPollIntervalMs.ToString(CultureInfo.InvariantCulture);
+            txtPowerWaitLogIntervalSec.Text = c.PowerWaitLogIntervalSec.ToString(CultureInfo.InvariantCulture);
+            cbEnablePowerCheckBypass.SelectedItem = c.EnablePowerCheckBypass ? "true" : "false";
+            if (cbEnablePowerCheckBypass.SelectedIndex < 0) cbEnablePowerCheckBypass.SelectedItem = "true";
+
             txtCurrentMin.Text = Dbl(c.CurrentMin);
             txtCurrentMax.Text = Dbl(c.CurrentMax);
 
@@ -179,6 +203,8 @@ namespace DX01_ShortCircuitTester
             txtPollIntervalMs.Text = c.PollIntervalMs.ToString(CultureInfo.InvariantCulture);
             txtReadTimeoutMs.Text = c.ReadTimeoutMs.ToString(CultureInfo.InvariantCulture);
             txtRelaySwitchDelayMs.Text = c.RelaySwitchDelayMs.ToString(CultureInfo.InvariantCulture);
+            txtNgRetryTimeoutMs.Text = c.NgRetryTimeoutMs.ToString(CultureInfo.InvariantCulture);
+            txtNgRetryIntervalMs.Text = c.NgRetryIntervalMs.ToString(CultureInfo.InvariantCulture);
         }
 
         private static string Dbl(double v)
@@ -235,12 +261,15 @@ namespace DX01_ShortCircuitTester
               .Append(txtIRUpper.Text).Append('|').Append(txtOLValue.Text).Append('|')
               .Append(txtVoltUpper.Text).Append('|').Append(txtVoltLower.Text).Append('|')
               .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|').Append(txtDcVoltageRange.Text).Append('|')
+              .Append(txtPowerOnThreshold.Text).Append('|').Append(txtPowerOffThreshold.Text).Append('|').Append(txtPowerPollIntervalMs.Text).Append('|')
+              .Append(txtPowerWaitLogIntervalSec.Text).Append('|').Append(cbEnablePowerCheckBypass.SelectedItem).Append('|')
               .Append(txtCurrentMin.Text).Append('|').Append(txtCurrentMax.Text).Append('|');
             for (int i = 1; i <= 10; i++)
                 sb.Append(_stepBoxes[i].Text).Append('|');
             sb.Append(txtPopupSeconds.Text).Append('|').Append(txtStepFontSize.Text).Append('|')
               .Append(txtPollIntervalMs.Text).Append('|').Append(txtReadTimeoutMs.Text).Append('|')
-              .Append(txtRelaySwitchDelayMs.Text);
+              .Append(txtRelaySwitchDelayMs.Text).Append('|')
+              .Append(txtNgRetryTimeoutMs.Text).Append('|').Append(txtNgRetryIntervalMs.Text);
             return sb.ToString();
         }
 
@@ -257,6 +286,10 @@ namespace DX01_ShortCircuitTester
             if (!PD(txtVoltIsoUpper, "VoltIsoUpper", out voltIso, ref err)) return false;
             double dcRange;
             if (!PD(txtDcVoltageRange, "DC Voltage Range", out dcRange, ref err)) return false;
+            double powerOn, powerOff;
+            if (!PD(txtPowerOnThreshold, "Power ON 門檻", out powerOn, ref err)) return false;
+            if (!PD(txtPowerOffThreshold, "Power OFF 門檻", out powerOff, ref err)) return false;
+            if (powerOff >= powerOn) { err = "Power OFF 門檻必須小於 Power ON 門檻。"; return false; }
             if (!PD(txtCurrentMin, "CurrentMin", out curMin, ref err)) return false;
             if (!PD(txtCurrentMax, "CurrentMax", out curMax, ref err)) return false;
 
@@ -272,12 +305,25 @@ namespace DX01_ShortCircuitTester
             for (int i = 1; i <= 10; i++)
                 if (!PWait(_stepBoxes[i], "Step" + i + "WaitMs", out waits[i], ref err)) return false;
 
+            int powerPoll;
+            if (!PI(txtPowerPollIntervalMs, "Power 偵測間隔", out powerPoll, ref err)) return false;
+            if (powerPoll < 0) { err = "Power 偵測間隔不可為負數。"; return false; }
+            int powerWaitLog;
+            if (!PI(txtPowerWaitLogIntervalSec, "Power 等待 Log 間隔", out powerWaitLog, ref err)) return false;
+            if (powerWaitLog < 1) { err = "Power 等待 Log 間隔必須 >= 1 秒。"; return false; }
+
             int popup, font, poll, readTo, relayDelay;
             if (!PI(txtPopupSeconds, "PopupSeconds", out popup, ref err)) return false;
             if (!PI(txtStepFontSize, "StepFontSize", out font, ref err)) return false;
             if (!PI(txtPollIntervalMs, "PollIntervalMs", out poll, ref err)) return false;
             if (!PI(txtReadTimeoutMs, "ReadTimeoutMs", out readTo, ref err)) return false;
             if (!PI(txtRelaySwitchDelayMs, "RelaySwitchDelayMs", out relayDelay, ref err)) return false;
+
+            int ngTimeout, ngInterval;
+            if (!PI(txtNgRetryTimeoutMs, "NG Retry Timeout", out ngTimeout, ref err)) return false;
+            if (ngTimeout < 0) { err = "NG Retry Timeout 不可為負數。"; return false; }
+            if (!PI(txtNgRetryIntervalMs, "NG Retry Interval", out ngInterval, ref err)) return false;
+            if (ngInterval <= 0) { err = "NG Retry Interval 必須大於 0。"; return false; }
 
             if (txtLanIp.Text.Trim().Length == 0) { err = "LanIP 不可空白。"; return false; }
 
@@ -299,6 +345,12 @@ namespace DX01_ShortCircuitTester
             c.Step10PMinusToCaseMax = voltIso;
             c.DcVoltageRange = dcRange;
 
+            c.PowerOnThreshold = powerOn;
+            c.PowerOffThreshold = powerOff;
+            c.PowerPollIntervalMs = powerPoll;
+            c.PowerWaitLogIntervalSec = powerWaitLog;
+            c.EnablePowerCheckBypass = string.Equals(cbEnablePowerCheckBypass.SelectedItem as string, "true", StringComparison.OrdinalIgnoreCase);
+
             c.CurrentMin = curMin;
             c.CurrentMax = curMax;
 
@@ -310,6 +362,8 @@ namespace DX01_ShortCircuitTester
             c.PollIntervalMs = poll;
             c.ReadTimeoutMs = readTo;
             c.RelaySwitchDelayMs = relayDelay;
+            c.NgRetryTimeoutMs = ngTimeout;
+            c.NgRetryIntervalMs = ngInterval;
             return true;
         }
 

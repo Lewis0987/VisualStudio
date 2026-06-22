@@ -61,9 +61,6 @@ namespace DX01_ShortCircuitTester
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
         public const string Version = "V2.2";
 
-        /// <summary>Power DC 48V 檢查門檻：量測電壓 &gt;= 此值（48V）視為 PASS。</summary>
-        private const double PowerCheckMinVoltage = 48.0;
-
         // Test 頁底部連線狀態用色：已連線=綠、未連線=紅、連線中=橘
         private enum ConnState { Disconnected, Connecting, Connected }
         private static readonly Color ConnConnected = Color.Green;
@@ -384,6 +381,38 @@ namespace DX01_ShortCircuitTester
             _flow.Measured += Flow_Measured;
             _flow.StepCompleted += Flow_StepCompleted;
             _flow.StatusChanged += Flow_StatusChanged;
+            _flow.InstructionChanged += Flow_InstructionChanged;
+            _flow.PowerWaitPrompt = OnPowerWaitPrompt;   // V2.3 Debug：等待 Power 前提示 Popup
+        }
+
+        /// <summary>
+        /// V2.3 Debug：等待 Power ON/OFF 前的提示 Popup（於流程內、UI 執行緒同步呼叫）。
+        /// 確認＝正常自動偵測；忽略＝跳過偵測直接繼續（僅 EnablePowerCheckBypass=true 顯示）；停止＝停止測試。
+        /// </summary>
+        private PowerWaitDecision OnPowerWaitPrompt(bool waitForOn)
+        {
+            string instr = waitForOn ? "請將電池 Power 開機" : "請將電池 Power 關機";
+            string title = waitForOn ? "等待 Power ON" : "等待 Power OFF";
+            bool bypass = AppSettings.Current.EnablePowerCheckBypass;
+
+            string msg = instr + "\n\n" +
+                "【確認】依正常流程自動偵測電壓，達門檻後繼續。\n" +
+                (bypass ? "【忽略】跳過偵測直接繼續（Debug）。\n" : "") +
+                "【停止】停止測試，回到待測。";
+
+            // 按鈕索引：bypass → 0=停止 1=忽略 2=確認；非 bypass → 0=停止 1=確認。Enter=最右（確認）。
+            int r = bypass
+                ? MsgBox.Show(this, title, msg, MessageBoxIcon.Question, "停止", "忽略", "確認")
+                : MsgBox.Show(this, title, msg, MessageBoxIcon.Question, "停止", "確認");
+
+            if (bypass && r == 2) return PowerWaitDecision.Confirm;
+            if (bypass && r == 1) return PowerWaitDecision.Ignore;
+            if (!bypass && r == 1) return PowerWaitDecision.Confirm;
+
+            // 0（停止）或 -1（關閉視窗）→ 停止測試
+            _userStopped = true;
+            if (_debugLog != null) _debugLog.Write(LogKind.Error, "等待 Power：使用者於提示視窗選擇停止");
+            return PowerWaitDecision.Stop;
         }
 
         /// <summary>啟動時嘗試連線（Relay 由 HID 自動偵測，電表用目前選擇的 COM）。</summary>
@@ -928,7 +957,7 @@ namespace DX01_ShortCircuitTester
                 _flow.Pause();
                 btnPause.Text = "繼續";
                 // 暫停：左側=暫停中、右側大狀態=暫停中
-                lblCurrentStep.Text = "暫停中";
+                SetCurrentStep("暫停中");
                 SetResult("暫停中", Color.White, Color.DarkGoldenrod);
                 if (_debugLog != null) _debugLog.Write(LogKind.Info, "測試已暫停（暫停中）");
             }
@@ -936,8 +965,8 @@ namespace DX01_ShortCircuitTester
             {
                 _flow.Resume();
                 btnPause.Text = "暫停";
-                // 恢復：左側回到目前 Step、右側大狀態=測試中
-                lblCurrentStep.Text = string.IsNullOrEmpty(_lastStepText) ? "測試中" : _lastStepText;
+                // 恢復：左側回到目前 Step、右側大狀態=測試中（一般步驟黑字）
+                SetCurrentStep(string.IsNullOrEmpty(_lastStepText) ? "測試中" : _lastStepText);
                 SetResult("測試中", Color.White, Color.RoyalBlue);
                 if (_debugLog != null) _debugLog.Write(LogKind.Info, "測試已繼續");
             }
@@ -966,22 +995,6 @@ namespace DX01_ShortCircuitTester
             txtBarcode.Text = sn ?? "";
             txtBarcode.Focus();
             txtBarcode.SelectAll();
-        }
-
-        /// <summary>
-        /// 「Power Voltage NG」彈窗（兩按鈕）：Power DC 48V 檢查 &lt; 48V 時顯示，含目前電壓值。
-        /// 回傳 true = 忽略（忽略警告繼續測試）；false = 確定（停止測試）。
-        /// 自訂對話框以支援按鈕文字 / 水平靠右排列（MessageBox 無法自訂）。
-        /// </summary>
-        private bool ShowPowerVoltageNgPrompt(double voltage)
-        {
-            string msg =
-                "Power DC 48V 檢查未通過。\n" +
-                "目前電壓：" + voltage.ToString("0.000") + " V（< 48V）\n\n" +
-                "「忽略」：忽略此警告並繼續測試。\n" +
-                "「確定」：停止測試，確認電源後重測。";
-            // 0 = 忽略（繼續），1 = 確定（停止）；Enter / 關閉 → 確定（安全停止）
-            return MsgBox.Show(this, "Power Voltage NG", msg, MessageBoxIcon.Warning, "忽略", "確定") == 0;
         }
 
         private async void StartTest(string sn)
@@ -1035,78 +1048,16 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Start Test");
             }
 
-            // ── 測試開始前：Step 0 Power DC 48V 檢查（DC Voltage、Range 100V、Relay 11）──
-            SetRunningState(true);
-            lblCurrentStep.Text = "Power DC 48V 檢查";
-            SetResult("檢查中", Color.White, Color.RoyalBlue);
-
-            _cts = new CancellationTokenSource();
-            PowerCheckResult power;
-            try
-            {
-                power = await _flow.CheckPowerOnAsync(PowerCheckMinVoltage, _cts.Token);
-            }
-            catch (Exception ex)
-            {
-                power = new PowerCheckResult { HasAnomaly = true, AnomalyType = "Device Error", AnomalyMessage = ex.Message };
-            }
-            finally
-            {
-                _cts.Dispose();
-                _cts = null;
-            }
-
-            // 設備 / 通訊異常：屬「測試前檢查失敗」→ 判定 FAIL（左：請重新測試 / 右：FAIL），不進入 Step1
-            if (power.HasAnomaly)
-            {
-                SetRunningState(false);
-                HandleDeviceAnomaly(new TestResult
-                {
-                    HasAnomaly = true,
-                    AnomalyType = power.AnomalyType,
-                    AnomalyMessage = power.AnomalyMessage,
-                    AnomalyStep = 0,
-                    AnomalyStepName = "Power DC 48V 檢查"
-                });
-                ResetLiveStatus();
-                ShowFailStatus();          // FAIL：左 請重新測試 / 右 FAIL
-                KeepBarcodeForRetry(sn);
-                return;
-            }
-
-            // Power DC 48V 檢查判定
-            if (power.PowerOn)
-            {
-                // 電壓 >= 48V → PASS，繼續 Step1
-                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Power Check PASS");
-            }
-            else
-            {
-                // 電壓 < 48V → 跳出「Power Voltage NG」彈窗（顯示目前電壓值）
-                bool ignore = ShowPowerVoltageNgPrompt(power.Voltage);   // true=忽略 / false=確定
-                if (!ignore)
-                {
-                    // 確定 → 停止測試：右側 FAIL、左側 請重新測試
-                    if (_debugLog != null) _debugLog.Write(LogKind.Error, "Power Check FAIL - Stop Test");
-                    SetRunningState(false);
-                    ResetLiveStatus();
-                    ShowFailStatus();
-                    KeepBarcodeForRetry(sn);
-                    return;
-                }
-
-                // 忽略 → 記錄 Debug Log 後繼續往 Step1 執行
-                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Power Check FAIL - Ignored by User");
-            }
-
-            // ── Power ON → 進入正式測試 ──
+            // V2.3：移除舊「Step 0 Power DC 48V 檢查」與忽略/確定彈窗；
+            // 改由 DX01TestFlow 內自動偵測：測試前等待 Power OFF → Step6 等待 Power ON → PASS 後等待 Power OFF。
             // 重置畫面（Return to Step1），固定新增「序號」列（工號不顯示於表格，僅記於 Debug Log / 底部）
             dgvResults.Rows.Clear();
             AddSerialRow(sn);
             lblMeasure.Text = "---";
             lblRelay.Text = "--";
-            lblCurrentStep.Text = "測試中";
+            SetCurrentStep("請將電池 Power 關機", true);   // 流程啟動後立即等待 Power OFF（紅字）
             SetResult("測試中", Color.White, Color.RoyalBlue);
+            SetRunningState(true);
 
             _cts = new CancellationTokenSource();
             _userStopped = false;
@@ -1215,7 +1166,7 @@ namespace DX01_ShortCircuitTester
 
             // 停止 / FAIL：左側改顯示「請重新測試」（PASS / NG 維持「待測」）
             if (result.Aborted || result.HasAnomaly)
-                lblCurrentStep.Text = "請重新測試";
+                SetCurrentStep("請重新測試");
 
             // V2.1 條碼行為：PASS → 清空等待下一顆；NG / 異常 / 停止 → 保留原條碼 + 全選方便重測
             bool pass = !result.Aborted && !result.HasAnomaly && result.IsPass;
@@ -1282,17 +1233,28 @@ namespace DX01_ShortCircuitTester
         /// <summary>FAIL 狀態顯示：左側「請重新測試」、右側大狀態「FAIL」（測試前檢查失敗 / 設備異常 / 例外）。</summary>
         private void ShowFailStatus()
         {
-            lblCurrentStep.Text = "請重新測試";
+            SetCurrentStep("請重新測試");
             SetResult("FAIL", Color.White, NgRed);
         }
 
         /// <summary>Step12 Return Step1：恢復目前步驟=待測、Relay=--、量測值=---（保留結果與表格）。</summary>
         private void ResetLiveStatus()
         {
-            lblCurrentStep.Text = "待測";
+            SetCurrentStep("待測");
             lblRelay.Text = "--";
             lblRelay.ForeColor = Color.MediumBlue;
             lblMeasure.Text = "---";
+        }
+
+        /// <summary>
+        /// V2.3：設定「目前步驟」文字與配色。
+        /// powerInstruction=true（等待 Power 開機 / 關機）→ 紅字，明顯提醒作業員操作；
+        /// 其餘一般步驟 / 狀態 → 黑字。字體粗體由全域字級設定維持（Designer + ApplyUiSettings）。
+        /// </summary>
+        private void SetCurrentStep(string text, bool powerInstruction = false)
+        {
+            lblCurrentStep.Text = text;
+            lblCurrentStep.ForeColor = powerInstruction ? Color.Red : Color.Black;
         }
 
         // ===== 流程事件（皆於 UI 執行緒觸發） =====
@@ -1304,7 +1266,7 @@ namespace DX01_ShortCircuitTester
             int retryIdx = baseName.IndexOf(" Retry ", StringComparison.Ordinal);
             if (retryIdx >= 0)
                 baseName = baseName.Substring(0, retryIdx);
-            lblCurrentStep.Text = "Step " + e.StepNumber + " — " + baseName;
+            SetCurrentStep("Step " + e.StepNumber + " — " + baseName);   // 一般步驟 → 黑字
             _lastStepText = lblCurrentStep.Text;   // 供暫停後「繼續」還原左側目前步驟
 
             lblInfo.Text = "執行中… Step " + e.StepNumber;
@@ -1389,16 +1351,8 @@ namespace DX01_ShortCircuitTester
                     : Color.FromArgb(183, 28, 28);
             }
 
-            // 主表格只顯示一列，但有複測時把每次嘗試明細寫入 Debug Log（Retry 0 / 1 / 2）
-            if (_debugLog != null && e.Attempts != null && e.Attempts.Count > 1)
-            {
-                foreach (var a in e.Attempts)
-                    _debugLog.Write(a.Pass ? LogKind.Info : LogKind.Error,
-                        string.Format("    Step{0} {1} Retry {2}: {3} | 判定 {4} → {5}",
-                            a.StepNumber, a.StepName, a.Attempt,
-                            TestStepResult.FormatValue(a.Value, a.Unit),
-                            e.LimitText, a.Pass ? "PASS" : "NG"));
-            }
+            // V2.3：NG 時間窗重試的逐筆明細不再逐行寫入 Debug Log（避免大量洗版）。
+            // 重試期間以單行狀態（原地更新）呈現，重試結果由流程寫入一筆摘要（PASS / 逾時 NG）。
 
             dgvResults.FirstDisplayedScrollingRowIndex = index;
         }
@@ -1406,6 +1360,15 @@ namespace DX01_ShortCircuitTester
         private void Flow_StatusChanged(object sender, string status)
         {
             lblInfo.Text = status;
+        }
+
+        /// <summary>
+        /// V2.3：等待 Power ON/OFF 時的作業員指示（請將電池 Power 開機 / 關機），
+        /// 顯示於「目前步驟」大字；即時電壓由 Flow_Measured 更新、狀態由 Flow_StatusChanged 更新。
+        /// </summary>
+        private void Flow_InstructionChanged(object sender, string message)
+        {
+            SetCurrentStep(message, true);   // 等待 Power 開機 / 關機 → 紅字提醒作業員操作
         }
 
         #endregion

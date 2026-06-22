@@ -255,7 +255,17 @@ namespace DX01_ShortCircuitTester.Device
 
         public double Read()
         {
-            string resp = Query("READ?");
+            return ParseRead(Query("READ?"));
+        }
+
+        /// <summary>靜默讀取：送 READ? 取值，但不寫 TX/RX Log（等待 Power ON/OFF 輪詢用）。錯誤仍會記錄。</summary>
+        public double ReadQuiet()
+        {
+            return ParseRead(Query("READ?", quiet: true));
+        }
+
+        private static double ParseRead(string resp)
+        {
             string first = resp.Split(',')[0].Trim();
 
             double value;
@@ -346,6 +356,12 @@ namespace DX01_ShortCircuitTester.Device
 
         private string Query(string command)
         {
+            return Query(command, false);
+        }
+
+        /// <summary>送出查詢並讀回回應。quiet=true 時不寫 TX/RX Log（但錯誤仍記錄）。</summary>
+        private string Query(string command, bool quiet)
+        {
             lock (_ioGate)
             {
                 if (!IsConnected)
@@ -354,9 +370,9 @@ namespace DX01_ShortCircuitTester.Device
                 try
                 {
                     _transport.WriteLine(command);
-                    WriteLog(LogKind.Tx, command);
+                    if (!quiet) WriteLog(LogKind.Tx, command);
                     string resp = _transport.ReadLine();
-                    WriteLog(LogKind.Rx, resp);
+                    if (!quiet) WriteLog(LogKind.Rx, resp);
                     return resp;
                 }
                 catch (Exception ex)

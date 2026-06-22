@@ -9,7 +9,9 @@ namespace DX01_ShortCircuitTester.Services
         Relay,
         Tx,
         Rx,
-        Error
+        Error,
+        /// <summary>V2.3：等待 Power ON/OFF 的單筆狀態行（畫面原地更新、不寫檔），避免輪詢洗版。</summary>
+        Status
     }
 
     public sealed class LogEventArgs : EventArgs

@@ -21,6 +21,14 @@ namespace DX01_ShortCircuitTester.Services
         }
     }
 
+    /// <summary>等待 Power ON/OFF 提示 Popup 的使用者決策（V2.3 Debug）。</summary>
+    public enum PowerWaitDecision
+    {
+        Confirm,   // 依正常流程自動偵測，達門檻後繼續
+        Ignore,    // 跳過門檻偵測直接繼續（Debug Bypass）
+        Stop       // 停止測試，回待測
+    }
+
     /// <summary>量測更新事件參數。</summary>
     public sealed class MeasurementEventArgs : EventArgs
     {
@@ -31,17 +39,6 @@ namespace DX01_ShortCircuitTester.Services
             Value = value;
             Unit = unit;
         }
-    }
-
-    /// <summary>產品 Power ON 檢查結果（測試開始前執行，不建立 TestResult）。</summary>
-    public sealed class PowerCheckResult
-    {
-        public bool PowerOn { get; set; }
-        public double Voltage { get; set; }
-        public double MinVoltage { get; set; }
-        public bool HasAnomaly { get; set; }
-        public string AnomalyType { get; set; }
-        public string AnomalyMessage { get; set; }
     }
 
     /// <summary>
@@ -64,8 +61,17 @@ namespace DX01_ShortCircuitTester.Services
         public event EventHandler<TestStepResult> StepCompleted;
         public event EventHandler<string> StatusChanged;
 
+        /// <summary>V2.3：需作業員動作的指示訊息（請將電池 Power 開機 / 關機），顯示於「目前步驟」大字。</summary>
+        public event EventHandler<string> InstructionChanged;
+
         /// <summary>除錯日誌（可為 null）；用於記錄各 Step 的等待時間。</summary>
         public DebugLog Log { get; set; }
+
+        /// <summary>
+        /// 等待 Power ON/OFF 前的提示 Popup 回呼（可為 null＝不提示，直接自動偵測）。
+        /// 參數 waitForOn：true=等待開機。回傳 Confirm（正常偵測）/ Ignore（跳過）/ Stop（停止）。由 UI 設定。
+        /// </summary>
+        public Func<bool, PowerWaitDecision> PowerWaitPrompt { get; set; }
 
         public DX01TestFlow(IRelayController relay, IGdm8261AController meter)
         {
@@ -80,6 +86,12 @@ namespace DX01_ShortCircuitTester.Services
         private void LogInfo(string msg)
         {
             if (Log != null) Log.Write(LogKind.Info, msg);
+        }
+
+        /// <summary>等待 Power ON/OFF 的單筆狀態行（畫面原地更新、不寫檔）。</summary>
+        private void LogStatus(string msg)
+        {
+            if (Log != null) Log.Write(LogKind.Status, msg);
         }
 
         /// <summary>記錄並等待某 Step 的 StepNWaitMs（0 = 記錄 skip 不等待）。</summary>
@@ -108,6 +120,9 @@ namespace DX01_ShortCircuitTester.Services
 
             try
             {
+                // V2.3 測試前：等待 Power OFF（請將電池 Power 關機，V <= PowerOffThreshold）才開始往下測試
+                await WaitForPowerAsync(false, 0, "等待 Power OFF…", token);
+
                 // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位（Relay 由下方狀態欄顯示，標題不重複）
                 RaiseStep(1, "初始化電表", RangeText(MeasurementMode.Resistance));
                 _meter.Reset();
@@ -137,6 +152,9 @@ namespace DX01_ShortCircuitTester.Services
                 // Step 5 P- 對外殼絕緣：Relay=10，R > 1MΩ
                 await MeasureStep(result, 5, "P- 對外殼絕緣", "10",
                         MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token);
+
+                // V2.3 Step 6 先等待 Power ON（請將電池 Power 開機，V >= PowerOnThreshold）才繼續電壓量測
+                await WaitForPowerAsync(true, 6, "等待 Power ON…", token);
 
                 // Step 6 切換電壓量測：DC Voltage、Range 由 Config（無判定值，仍列入結果顯示）
                 string dcRangeLabel = Cfg.DcVoltageRange <= 0
@@ -181,43 +199,110 @@ namespace DX01_ShortCircuitTester.Services
                 AddErrorStep(result, _currentStepNumber, _currentStepName, type, ex.Message);
             }
 
+            // V2.3 PASS 後：等待 Power OFF（請將電池 Power 關機）再返回待機。
+            // 在判定鎖定後執行：此處按「停止」或設備斷線僅返回待機，不影響已判定的 PASS 結果。
+            // FAIL / NG / 中止 / 設備異常 皆不進入（IsPass 為 false）→ 維持目前停止流程，等待人工處理。
+            if (result.IsPass)
+            {
+                try
+                {
+                    await WaitForPowerAsync(false, 12,
+                        "測試完成 PASS，請將電池 Power 關機（等待 Power OFF…）", token);
+                }
+                catch (OperationCanceledException) { /* 操作員停止：保留 PASS，僅返回待機 */ }
+                catch { /* 等待期間設備異常：忽略，不影響已判定的 PASS */ }
+            }
+
             return Finish(result);
         }
 
         /// <summary>
-        /// 正式測試流程前的 Step 0「Power DC 48V 檢查」：DC 電壓模式、固定 100V 檔位、Relay=11、READ?。
-        /// 電壓 &gt;= minVoltage（48V）視為 PASS。檢查後一律將 Relay 復位 00。
-        /// 不建立 TestResult；設備 / 通訊異常時回報 HasAnomaly，交由 UI 處理。
+        /// V2.3：等待作業員開 / 關電池 Power。以 DC 電壓模式（Cfg.DcVoltageRange）、Relay=11 持續量測，
+        /// 直到達到門檻才返回（無逾時，只能由取消令 / 停止 中斷）。
+        /// waitForOn=true：等待 V &gt;= PowerOnThreshold（請開機）；false：等待 V &lt;= PowerOffThreshold（請關機）。
+        /// 期間透過 InstructionChanged（指示）/ StatusChanged（狀態）/ Measured（即時電壓）回報 UI。
+        /// 設備 / 通訊異常（READ 失敗）會以例外往上拋，由 RunAsync 統一處理（前置 / Step6 等待 → FAIL；
+        /// PASS 後等待 → 由呼叫端吞掉，不影響已判定的 PASS）。
         /// </summary>
-        public async Task<PowerCheckResult> CheckPowerOnAsync(double minVoltage, CancellationToken token)
+        private async Task WaitForPowerAsync(bool waitForOn, int stepNumber, string status, CancellationToken token)
         {
-            var r = new PowerCheckResult { MinVoltage = minVoltage };
-            try
-            {
-                RaiseStatus("Power DC 48V 檢查…");
-                RaiseStep(0, "Power DC 48V 檢查", "100V");
-                _meter.SetDcVoltageModeWithRange(100.0);   // Step 0：固定 100V 檔位（DC Voltage、Relay 11）
-                SwitchRelay("11");
-                await Delay(Cfg.RelaySwitchDelayMs, token);
-                double v = _meter.Read();
-                Measured?.Invoke(this, new MeasurementEventArgs(v, "V"));
-                r.Voltage = v;
-                r.PowerOn = v >= minVoltage;
+            double threshold = waitForOn ? Cfg.PowerOnThreshold : Cfg.PowerOffThreshold;
+            string instruction = waitForOn ? "請將電池 Power 開機" : "請將電池 Power 關機";
+            string waitLabel = waitForOn ? "等待 Power ON" : "等待 Power OFF";
 
-                // 檢查後還原 Relay 至安全狀態（不論 ON / OFF）
-                try { SwitchRelay("00"); } catch { }
-            }
-            catch (OperationCanceledException)
+            // 供設備異常回報用（不經 RaiseStep，避免在主表格新增列 / 顯示 "Step N —" 標題）
+            _currentStepNumber = stepNumber;
+            _currentStepName = instruction;
+
+            RaiseInstruction(instruction);
+            RaiseStatus(status);
+            // 一筆永久 Log（檔案 + 畫面）記錄開始等待；之後輪詢電壓改用「狀態行」原地更新，不洗版。
+            LogInfo(instruction + "（" + waitLabel + "，門檻 " + (waitForOn ? "≥ " : "≤ ") +
+                    threshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "V）");
+
+            // V2.3 Debug：等待前提示 Popup（確認 / 忽略 / 停止）。
+            // 確認＝正常自動偵測；忽略＝跳過門檻偵測直接繼續（Debug Bypass）；停止＝中止測試。
+            if (PowerWaitPrompt != null)
             {
-                throw;
+                PowerWaitDecision decision = PowerWaitPrompt(waitForOn);
+                if (decision == PowerWaitDecision.Stop)
+                {
+                    LogInfo(waitLabel + "：使用者選擇停止");
+                    throw new OperationCanceledException();
+                }
+                if (decision == PowerWaitDecision.Ignore)
+                {
+                    LogInfo(waitLabel + "：忽略（Debug Bypass）→ 跳過門檻偵測，直接繼續");
+                    return;
+                }
             }
-            catch (Exception ex)
+
+            _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
+            SwitchRelay("11");
+            await Delay(Cfg.RelaySwitchDelayMs, token);
+
+            int interval = Cfg.PowerPollIntervalMs > 0 ? Cfg.PowerPollIntervalMs : 500;
+            long logIntervalMs = (long)(Cfg.PowerWaitLogIntervalSec > 0 ? Cfg.PowerWaitLogIntervalSec : 30) * 1000;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            double nextLogMs = 0;   // 0 → 進入等待立即輸出第一筆狀態，之後每 logIntervalMs 一次
+
+            while (true)
             {
-                r.HasAnomaly = true;
-                r.AnomalyType = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
-                r.AnomalyMessage = ex.Message;
+                token.ThrowIfCancellationRequested();
+
+                // 暫停中：停止偵測與狀態輸出，僅顯示一次提示；恢復後重新開始計時並立即再輸出一筆。
+                if (IsPaused)
+                {
+                    LogInfo("測試暫停，Power 偵測暫停");
+                    await WaitWhilePausedAsync(token);   // 阻塞至「繼續」(Resume) 或「停止」(取消)
+                    RaiseInstruction(instruction);       // 恢復後重新顯示紅字指示
+                    RaiseStatus(status);
+                    nextLogMs = sw.Elapsed.TotalMilliseconds;   // 恢復後立即輸出一筆並重新計時
+                }
+
+                // 靜默讀取：送 READ? 取得電壓，但不寫 TX/RX Log（偵測仍維持 PollIntervalMs，不受 Log 節流影響）。
+                double v = _meter.ReadQuiet();
+                Measured?.Invoke(this, new MeasurementEventArgs(v, "V"));   // 即時電壓仍每次更新於畫面
+
+                bool reached = waitForOn ? (v >= threshold) : (v <= threshold);
+                if (reached)
+                {
+                    // 偵測成功立即輸出（不受等待 Log 節流限制）：Power ON/OFF detected (xx.xxV)
+                    LogInfo((waitForOn ? "Power ON detected (" : "Power OFF detected (") +
+                            v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "V)");
+                    break;
+                }
+
+                // 等待狀態 Log：每 PowerWaitLogIntervalSec 才輸出一次（避免洗版）。
+                if (sw.Elapsed.TotalMilliseconds >= nextLogMs)
+                {
+                    LogStatus(waitLabel + "... Voltage=" +
+                              v.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture) + "V");
+                    nextLogMs = sw.Elapsed.TotalMilliseconds + logIntervalMs;
+                }
+
+                await Delay(interval, token);
             }
-            return r;
         }
 
         /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。judgement 可覆寫結果欄（如 Step6 顯示 OK）。</summary>
@@ -259,75 +344,80 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// 執行一個量測步驟並判定，內含 NG 自動複測（最多 3 次）。
-        /// 順序：① 切換 GDM 模式 ② 切換 Relay ③ 等待 RelaySwitchDelayMs ④ READ? ⑤ 判定。
-        /// 主表格只回報「一列」（整併後的最終結果，NG/PASS 後附加 (Retry N)），
-        /// 完整重試明細存於該列的 <see cref="TestStepResult.Attempts"/>，供 CSV / Debug Log / 內部紀錄。
-        /// postPassWaitMs：PASS 後再等待的時間（Step7 用 Step7WaitMs）。
+        /// 執行一個量測步驟並判定（V2.3：NG 改用「時間窗」重試，取代固定 3 次）。
+        /// 順序：① 切換 GDM 模式 ② 切換 Relay ③ 等待 RelaySwitchDelayMs ④ StepNWaitMs ⑤ READ?（loud）⑥ 判定。
+        /// 若 NG：於 Cfg.NgRetryTimeoutMs 內每 Cfg.NgRetryIntervalMs 以「靜默讀取」重新量測，
+        ///   期間恢復正常即判 PASS；逾時仍不符才判 NG。重試期間以單行狀態（原地更新）顯示，避免 Debug Log 洗版。
+        /// 主表格只回報「一列」（最終結果，重試後附加 (Retry N)）；完整明細存於 <see cref="TestStepResult.Attempts"/>。
+        /// 注意：此重試僅適用一般量測 Step，不適用 Power ON/OFF 等待（後者為無限等待）。
         /// </summary>
         private async Task<bool> MeasureStep(
             TestResult result, int step, string name, string relayCode,
             MeasurementMode mode, string unit, double? low, double? high,
             CancellationToken token)
         {
-            const int maxAttempts = 3; // 第 1 次 + 最多 2 次複測（Retry 0 / 1 / 2）
             string modeText = mode == MeasurementMode.Resistance ? "電阻" : "DC電壓";
             string rangeText = RangeText(mode);
-
             var attempts = new List<TestStepResult>();
-            bool finalPass = false;
-            double finalValue = 0;
-            int finalIndex = 0;
 
-            for (int i = 0; i < maxAttempts; i++) // i = 0-based 嘗試索引（= Retry 編號）
+            // 暫停檢查點①：進入此步驟前
+            await WaitWhilePausedAsync(token);
+            RaiseStep(step, name, rangeText);
+
+            // ① 切換 GDM 檔位 / 模式（DC 電壓固定檔位，避免被 auto 蓋掉）② 切換 Relay ③ 等待繼電器穩定 ④ StepNWaitMs
+            if (mode == MeasurementMode.DcVoltage)
+                _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
+            else
+                _meter.SetMode(mode);
+            SwitchRelay(relayCode);
+            LogInfo("RelaySwitchDelayMs = " + Cfg.RelaySwitchDelayMs);
+            await Delay(Cfg.RelaySwitchDelayMs, token);
+            await WaitStep(step, token);
+
+            // 暫停檢查點②：READ? 之前
+            await WaitWhilePausedAsync(token);
+
+            // ⑤ 第一次量測（loud，保留 TX/RX）⑥ 判定
+            double value = _meter.Read();
+            Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
+            bool pass = Evaluate(value, low, high);
+            attempts.Add(MakeAttempt(step, name, relayCode, modeText, rangeText, value, unit, low, high, pass, 0));
+
+            int retryCount = 0;
+            int timeoutMs = Cfg.NgRetryTimeoutMs < 0 ? 0 : Cfg.NgRetryTimeoutMs;
+            int intervalMs = Cfg.NgRetryIntervalMs > 0 ? Cfg.NgRetryIntervalMs : 300;
+
+            if (!pass && timeoutMs > 0)
             {
-                // 暫停檢查點①：進入此步驟（含複測）前 → 暫停則停在目前 Step，不切換到下一步
-                await WaitWhilePausedAsync(token);
+                // NG → 時間窗重試：靜默讀取（不寫 TX/RX）＋單行狀態（原地更新），避免洗版。
+                LogInfo("Step" + step + " 量測 NG（" + TestStepResult.FormatValue(value, unit) +
+                        "），進入重試時間窗 " + timeoutMs + "ms（每 " + intervalMs + "ms 重測）");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                // 標題只顯示 動作名稱（+Retry）；Relay 由下方「Relay 狀態」欄顯示，不放進標題避免過長
-                string desc = i == 0 ? name : name + " Retry " + i;
-                RaiseStep(step, desc, RangeText(mode));
-
-                // ① 切換 GDM 檔位 / 模式（DC 電壓固定檔位，避免被 auto 蓋掉）
-                if (mode == MeasurementMode.DcVoltage)
-                    _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
-                else
-                    _meter.SetMode(mode);
-                SwitchRelay(relayCode);                     // ② 切換 Relay
-                LogInfo("RelaySwitchDelayMs = " + Cfg.RelaySwitchDelayMs);
-                await Delay(Cfg.RelaySwitchDelayMs, token); // ③ 等待繼電器穩定
-                await WaitStep(step, token);                // ④ 等待 StepNWaitMs
-
-                // 暫停檢查點②：等待 StepWaitMs 完成後、READ? 之前 → 暫停在此生效（READ? 進行中則待其完成）
-                await WaitWhilePausedAsync(token);
-
-                double value = _meter.Read();               // ⑤ READ?
-                Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
-                bool pass = Evaluate(value, low, high);      // ⑤ 判定
-
-                attempts.Add(new TestStepResult
+                while (sw.Elapsed.TotalMilliseconds < timeoutMs)
                 {
-                    StepNumber = step,
-                    StepName = name,
-                    RelayCode = relayCode,
-                    Mode = modeText,
-                    Range = rangeText,
-                    Value = value,
-                    Unit = unit,
-                    LowLimit = low,
-                    HighLimit = high,
-                    Pass = pass,
-                    Attempt = i,
-                    Time = DateTime.Now
-                });
+                    await WaitWhilePausedAsync(token);   // 暫停則停在此（時間窗於暫停期間不前進視為 best-effort）
+                    await Delay(intervalMs, token);
 
-                finalPass = pass;
-                finalValue = value;
-                finalIndex = i;
+                    value = _meter.ReadQuiet();          // 重試靜默讀取（無 TX/RX）
+                    Measured?.Invoke(this, new MeasurementEventArgs(value, unit));
+                    pass = Evaluate(value, low, high);
+                    retryCount++;
+                    attempts.Add(MakeAttempt(step, name, relayCode, modeText, rangeText, value, unit, low, high, pass, retryCount));
+
+                    LogStatus("Step" + step + " 重試中... " + TestStepResult.FormatValue(value, unit) +
+                              " (" + (int)sw.Elapsed.TotalMilliseconds + "/" + timeoutMs + "ms)");
+
+                    if (pass)
+                        break;
+                }
 
                 if (pass)
-                    break;
-                // NG → 自動複測（迴圈），連續 maxAttempts 次才判 NG
+                    LogInfo("Step" + step + " 重試 " + retryCount + " 次後 PASS（" +
+                            TestStepResult.FormatValue(value, unit) + "，" + (int)sw.Elapsed.TotalMilliseconds + "ms）");
+                else
+                    LogInfo("Step" + step + " 重試逾時 NG（" + TestStepResult.FormatValue(value, unit) +
+                            "，" + timeoutMs + "ms）");
             }
 
             // 整併為單一列：主表格只顯示一列；Attempts 保留完整重試明細。
@@ -338,19 +428,41 @@ namespace DX01_ShortCircuitTester.Services
                 RelayCode = relayCode,
                 Mode = modeText,
                 Range = rangeText,
-                Value = finalValue,
+                Value = value,
                 Unit = unit,
                 LowLimit = low,
                 HighLimit = high,
-                Pass = finalPass,
-                RetryCount = finalIndex, // 0=首次即定案；>0 顯示 (Retry N)
+                Pass = pass,
+                RetryCount = retryCount, // 0=首次即定案；>0 顯示 (Retry N)
                 Attempts = attempts,
                 Time = DateTime.Now
             };
             result.Steps.Add(display);
             StepCompleted?.Invoke(this, display);
 
-            return finalPass;
+            return pass;
+        }
+
+        /// <summary>建立一筆重試明細（供 Attempts 紀錄）。</summary>
+        private static TestStepResult MakeAttempt(
+            int step, string name, string relayCode, string modeText, string rangeText,
+            double value, string unit, double? low, double? high, bool pass, int attempt)
+        {
+            return new TestStepResult
+            {
+                StepNumber = step,
+                StepName = name,
+                RelayCode = relayCode,
+                Mode = modeText,
+                Range = rangeText,
+                Value = value,
+                Unit = unit,
+                LowLimit = low,
+                HighLimit = high,
+                Pass = pass,
+                Attempt = attempt,
+                Time = DateTime.Now
+            };
         }
 
         /// <summary>依上下限判定：兩者皆有=區間；只有上限=小於；只有下限=大於。</summary>
@@ -395,6 +507,11 @@ namespace DX01_ShortCircuitTester.Services
         private void RaiseStatus(string status)
         {
             StatusChanged?.Invoke(this, status);
+        }
+
+        private void RaiseInstruction(string message)
+        {
+            InstructionChanged?.Invoke(this, message);
         }
 
         // ===== 暫停 / 繼續 =====

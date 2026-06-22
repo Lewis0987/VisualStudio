@@ -32,6 +32,12 @@ namespace DX01_ShortCircuitTester.Device
 
         /// <summary>讀取目前量測值（電阻回傳 Ω，電壓回傳 V）。</summary>
         double Read();
+
+        /// <summary>
+        /// 靜默讀取量測值：仍送出 READ? 取得電壓，但「不」將 TX/RX 寫入 Debug Log。
+        /// 供等待 Power ON/OFF 的高頻輪詢使用，避免 Debug Log 被 TX/RX 洗版。
+        /// </summary>
+        double ReadQuiet();
     }
 
     /// <summary>
@@ -102,6 +108,12 @@ namespace DX01_ShortCircuitTester.Device
 
             bool fault = RandomNg && _rng.NextDouble() < 0.18;
             return Simulate(fault);
+        }
+
+        /// <summary>模擬：靜默讀取與一般讀取相同（Mock 本就不寫 Debug Log）。</summary>
+        public double ReadQuiet()
+        {
+            return Read();
         }
 
         /// <summary>依模式與 Relay 代碼模擬量測值；fault=true 時回傳不合格值。</summary>

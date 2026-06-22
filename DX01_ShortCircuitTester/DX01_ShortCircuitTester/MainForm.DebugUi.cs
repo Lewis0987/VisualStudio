@@ -31,6 +31,7 @@ namespace DX01_ShortCircuitTester
         private readonly object _logLock = new object();
         private System.Windows.Forms.Timer _logFlushTimer;
 
+
         private GroupBox gbDevTest;
         private Button btnRelayCycle;
         private Button btnGdmTest;
@@ -200,12 +201,12 @@ namespace DX01_ShortCircuitTester
                 if (e == null)
                     return;
 
-                // 檔案：完整寫入（不受畫面 DebugLevel 過濾，確保可完整追溯）
+                // 檔案：完整寫入（不受畫面 DebugLevel 過濾，確保可完整追溯）。
                 if (_logFile != null)
                     _logFile.Append(string.Format("{0:yyyy-MM-dd HH:mm:ss.fff} [{1}] {2}", e.Time, e.Kind, e.Message));
 
-                // 畫面：依 DebugLevel 過濾後入佇列
-                if (!AllowLog(e.Kind, AppSettings.Current.DebugLevel))
+                // 畫面：Status（等待 Power 狀態，已於流程節流）一律顯示；其餘依 DebugLevel 過濾後入佇列。
+                if (e.Kind != LogKind.Status && !AllowLog(e.Kind, AppSettings.Current.DebugLevel))
                     return;
 
                 lock (_logLock)
@@ -265,6 +266,7 @@ namespace DX01_ShortCircuitTester
                 case LogKind.Tx: color = Color.DarkGreen; prefix = "TX: "; break;
                 case LogKind.Rx: color = Color.FromArgb(0, 128, 0); prefix = "RX: "; break;
                 case LogKind.Error: color = Color.Firebrick; prefix = "ERR: "; break;
+                case LogKind.Status: color = Color.SteelBlue; prefix = ""; break;       // 等待 Power 狀態（已於流程節流）
                 default: color = Color.DimGray; prefix = ""; break;
             }
 
