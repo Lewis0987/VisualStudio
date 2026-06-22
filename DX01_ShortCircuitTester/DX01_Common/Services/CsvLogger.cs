@@ -21,7 +21,7 @@ namespace DX01_ShortCircuitTester.Services
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
 
         /// <summary>固定 CSV 表頭（欄位順序不可變更）。</summary>
-        private const string Header = "TIME,Label,G1G2R,G1P+R,G1P-R,P+P-V,G1P+V,G2P-V";
+        private const string Header = "TIME,Label,TestCount,G1G2R,G1P+R,G1P-R,P+P-V,G1P+V,G2P-V";
 
         // 各 CSV 量測欄位對應的流程步驟編號：
         //   G1G2R = Step3 外殼對外殼導通 (Ω)
@@ -50,10 +50,11 @@ namespace DX01_ShortCircuitTester.Services
                 LogDirectory,
                 "DX01_" + result.StartTime.ToString("yyyyMMdd") + ".csv");
 
-            // TIME = 測試完成時間；Label = 條碼 / 序號；其餘為各量測欄位（未量測留空）。
+            // TIME = 測試完成時間；Label = 條碼 / 序號；TestCount = 同一 Label 累計測試次數；其餘為各量測欄位（未量測留空）。
             var sb = new StringBuilder();
             sb.Append(Csv(result.EndTime.ToString("yyyy-MM-dd HH:mm:ss"))).Append(',');
             sb.Append(Csv(result.SerialNumber ?? "")).Append(',');
+            sb.Append(result.TestCount.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(',');
             sb.Append(Csv(MeasureCell(result, StepG1G2R))).Append(',');
             sb.Append(Csv(MeasureCell(result, StepG1PPlusR))).Append(',');
             sb.Append(Csv(MeasureCell(result, StepG1PMinusR))).Append(',');

@@ -43,6 +43,9 @@ namespace DX01_ShortCircuitTester
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
 
+        // V2.3：同一 Label 的累計測試次數（每開始一次完整測試 +1；含 PASS / FAIL / 停止）。整個 session 保留。
+        private readonly Dictionary<string, int> _testCounts = new Dictionary<string, int>();
+
         // 避免同一次斷線重複跳出「LAN 連線中斷」提示；連線成功後重置
         private bool _lanLostShown;
 
@@ -1048,6 +1051,10 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Start Test");
             }
 
+            // V2.3：同一 Label 累計測試次數 +1（每開始一次完整測試流程；含 PASS / FAIL / 停止）。
+            int prevCount;
+            _testCounts[sn] = (_testCounts.TryGetValue(sn, out prevCount) ? prevCount : 0) + 1;
+
             // V2.3：移除舊「Step 0 Power DC 48V 檢查」與忽略/確定彈窗；
             // 改由 DX01TestFlow 內自動偵測：測試前等待 Power OFF → Step6 等待 Power ON → PASS 後等待 Power OFF。
             // 重置畫面（Return to Step1），固定新增「序號」列（工號不顯示於表格，僅記於 Debug Log / 底部）
@@ -1130,24 +1137,34 @@ namespace DX01_ShortCircuitTester
             else
                 SetResult("NG", Color.White, NgRed);
 
-            // V2.2：Debug Log 記錄操作者與最終結果
+            // V2.3：帶入此 Label 的累計測試次數（StartTest 已 +1）。
+            int testCount;
+            result.TestCount = (!string.IsNullOrEmpty(result.SerialNumber) &&
+                                _testCounts.TryGetValue(result.SerialNumber, out testCount)) ? testCount : 0;
+
+            // V2.2：Debug Log 記錄操作者與最終結果；V2.3 加記 Label / TestCount（流程結束一律顯示）
             if (_debugLog != null)
             {
                 string verdict = result.Aborted ? (_userStopped ? "STOP" : "ABORT")
                     : (result.HasAnomaly ? "FAIL (設備異常)" : (result.IsPass ? "PASS" : "NG"));
                 _debugLog.Write(LogKind.Info, "Operator : " + result.OperatorId);
                 _debugLog.Write(LogKind.Info, "Result : " + verdict);
+                _debugLog.Write(LogKind.Info, "Label : " + result.SerialNumber);
+                _debugLog.Write(LogKind.Info, "TestCount : " + result.TestCount);
             }
 
+            // V2.3：僅「PASS」寫入 CSV（FAIL / NG / 停止 / 設備異常皆不寫，CSV 只保留正式通過產品紀錄）。
             string logFile = "";
-            try
+            if (result.IsPass)
             {
-                if (result.Steps.Count > 0)
+                try
+                {
                     logFile = CsvLogger.Append(result);
-            }
-            catch (Exception ex)
-            {
-                lblInfo.Text = "CSV 寫入失敗: " + ex.Message;
+                }
+                catch (Exception ex)
+                {
+                    lblInfo.Text = "CSV 寫入失敗: " + ex.Message;
+                }
             }
 
             SetRunningState(false);

@@ -131,6 +131,9 @@ namespace DX01_ShortCircuitTester.Models
         /// <summary>執行此測試的操作者工號（人員追溯用；不含密碼）。</summary>
         public string OperatorId { get; set; }
 
+        /// <summary>V2.3：同一 Label 的累計測試次數（含 PASS / FAIL / 停止）；寫入 CSV 供重測追蹤。</summary>
+        public int TestCount { get; set; }
+
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
 
