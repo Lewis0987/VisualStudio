@@ -107,7 +107,7 @@ namespace DX01_ShortCircuitTester.Services
             try
             {
                 // V2.3 測試前：等待 Power OFF（Turn off the battery，V <= PowerOffThreshold）才開始；逾時 → NG 停止
-                if (!await WaitForPowerAsync(false, 0, "Waiting for Power OFF...", result, true, token))
+                if (!await WaitForPowerAsync(false, 0, result, true, token))
                     return Finish(result);
 
                 // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位（Relay 由下方狀態欄顯示，標題不重複）
@@ -143,7 +143,7 @@ namespace DX01_ShortCircuitTester.Services
                     return Finish(result);
 
                 // V2.3 Step 6 先等待 Power ON（Turn on the battery，V >= PowerOnThreshold）才繼續；逾時 → NG 停止
-                if (!await WaitForPowerAsync(true, 6, "Waiting for Power ON...", result, true, token))
+                if (!await WaitForPowerAsync(true, 6, result, true, token))
                     return Finish(result);
 
                 // Step 6 切換電壓量測：DC Voltage、Range 由 Config（無判定值，仍列入結果顯示）
@@ -201,8 +201,7 @@ namespace DX01_ShortCircuitTester.Services
                 try
                 {
                     // PASS 後等待 Power OFF；failOnTimeout=false → 逾時僅返回待機，不影響已判定的 PASS。
-                    await WaitForPowerAsync(false, 12,
-                        "Test PASS - Turn off the battery (Waiting for Power OFF...)", result, false, token);
+                    await WaitForPowerAsync(false, 12, result, false, token);
                 }
                 catch (OperationCanceledException) { /* 操作員停止：保留 PASS，僅返回待機 */ }
                 catch { /* 等待期間設備異常：忽略，不影響已判定的 PASS */ }
@@ -220,9 +219,10 @@ namespace DX01_ShortCircuitTester.Services
         /// PowerWaitTimeoutSec &lt;= 0 視為無限等待（只能由停止中斷）。暫停期間逾時計時暫停。
         /// 設備 / 通訊異常（READ 失敗）以例外往上拋，由 RunAsync 統一處理。
         /// </summary>
-        private async Task<bool> WaitForPowerAsync(bool waitForOn, int stepNumber, string status,
+        private async Task<bool> WaitForPowerAsync(bool waitForOn, int stepNumber,
             TestResult result, bool failOnTimeout, CancellationToken token)
         {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
             double threshold = waitForOn ? Cfg.PowerOnThreshold : Cfg.PowerOffThreshold;
             string instruction = waitForOn ? "Turn on the battery." : "Turn off the battery.";
             string waitLabel = waitForOn ? "Waiting for Power ON" : "Waiting for Power OFF";
@@ -231,11 +231,12 @@ namespace DX01_ShortCircuitTester.Services
             _currentStepNumber = stepNumber;
             _currentStepName = instruction;
 
+            // Power 等待文字（指示 / Waiting / Timeout / detected）一律顯示於「目前步驟」紅字（RaiseInstruction）；
+            // 底部狀態列只保留一般狀態（測試中）。
             RaiseInstruction(instruction);
-            RaiseStatus(status);
-            // 一筆永久 Log 記錄開始等待；之後等待狀態每 PowerWaitLogIntervalSec 才輸出一次，不洗版。
+            RaiseStatus("測試中…");
             LogInfo(instruction + " (" + waitLabel + ", threshold " + (waitForOn ? ">= " : "<= ") +
-                    threshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "V)");
+                    threshold.ToString("0.###", ci) + "V)");
 
             _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
             SwitchRelay("11");
@@ -244,59 +245,76 @@ namespace DX01_ShortCircuitTester.Services
             int interval = Cfg.PowerPollIntervalMs > 0 ? Cfg.PowerPollIntervalMs : 500;
             long logIntervalMs = (long)(Cfg.PowerWaitLogIntervalSec > 0 ? Cfg.PowerWaitLogIntervalSec : 30) * 1000;
             long timeoutMs = (long)(Cfg.PowerWaitTimeoutSec > 0 ? Cfg.PowerWaitTimeoutSec : 0) * 1000;   // 0 = 無限
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            double nextLogMs = 0;   // 0 → 進入等待立即輸出第一筆狀態，之後每 logIntervalMs 一次
-            int lastShownSec = -1;  // 已顯示的 Timeout 倒數秒數（每秒變動才更新狀態）
+            const int InstructionHoldMs = 3000;   // 階段1：操作指示維持時間（讓 OP 先看清要做什麼）
+
+            // ── 階段1：顯示「Turn on/off the battery.」約 3 秒（期間仍偵測；若已達門檻則提前完成）。
+            var holdSw = System.Diagnostics.Stopwatch.StartNew();
+            while (holdSw.Elapsed.TotalMilliseconds < InstructionHoldMs)
+            {
+                token.ThrowIfCancellationRequested();
+                if (IsPaused)
+                {
+                    holdSw.Stop();
+                    LogInfo("Test paused. Power detection paused.");
+                    await WaitWhilePausedAsync(token);
+                    RaiseInstruction(instruction);   // 恢復後重新顯示紅字指示於「目前步驟」
+                    holdSw.Start();
+                }
+
+                double pv = _meter.ReadQuiet();
+                Measured?.Invoke(this, new MeasurementEventArgs(pv, "V"));
+                if (waitForOn ? (pv >= threshold) : (pv <= threshold))
+                    return await PowerDetectedAsync(waitForOn, pv, token);
+
+                await Delay(interval, token);
+            }
+
+            // ── 階段2：「目前步驟」改顯示「Waiting for Power ON/OFF...」並開始每秒倒數 Timeout / 逾時計時。
+            RaiseInstruction(waitLabel + "...");
+            var sw = System.Diagnostics.Stopwatch.StartNew();   // 逾時自階段2開始計
+            double nextLogMs = 0;
+            int lastShownSec = -1;
 
             while (true)
             {
                 token.ThrowIfCancellationRequested();
 
-                // 暫停中：停止偵測與狀態輸出，逾時計時亦暫停；恢復後重新計時並立即再輸出一筆。
+                // 暫停中：停止偵測與倒數，逾時計時亦暫停；恢復後重新計時並立即重畫。
                 if (IsPaused)
                 {
                     sw.Stop();
                     LogInfo("Test paused. Power detection paused.");
-                    await WaitWhilePausedAsync(token);   // 阻塞至「繼續」(Resume) 或「停止」(取消)
-                    RaiseInstruction(instruction);       // 恢復後重新顯示紅字指示
-                    RaiseStatus(status);
+                    await WaitWhilePausedAsync(token);
+                    RaiseInstruction(waitLabel + "...");   // 恢復後重新顯示於「目前步驟」（下一輪補上 Timeout 秒數）
                     sw.Start();
-                    nextLogMs = sw.Elapsed.TotalMilliseconds;   // 恢復後立即輸出一筆並重新計時
-                    lastShownSec = -1;                          // 恢復後立即重畫倒數
+                    nextLogMs = sw.Elapsed.TotalMilliseconds;
+                    lastShownSec = -1;
                 }
 
-                // 靜默讀取：送 READ? 取得電壓，但不寫 TX/RX Log（偵測仍維持 PollIntervalMs，不受 Log 節流影響）。
                 double v = _meter.ReadQuiet();
-                Measured?.Invoke(this, new MeasurementEventArgs(v, "V"));   // 即時電壓仍每次更新於畫面
+                Measured?.Invoke(this, new MeasurementEventArgs(v, "V"));
 
-                bool reached = waitForOn ? (v >= threshold) : (v <= threshold);
-                if (reached)
-                {
-                    // 偵測成功立即輸出（不受等待 Log 節流限制）：Power ON/OFF detected. (xx.xxV)
-                    LogInfo((waitForOn ? "Power ON detected. (" : "Power OFF detected. (") +
-                            v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "V)");
-                    return true;
-                }
+                if (waitForOn ? (v >= threshold) : (v <= threshold))
+                    return await PowerDetectedAsync(waitForOn, v, token);
 
-                // 逾時判定：超過 PowerWaitTimeoutSec 仍未達門檻 → NG（前置/Step6 加一筆結果列並停止；PASS 後僅返回）。
+                // 逾時 → 套用既有 NG 流程（畫面直接顯示 NG，不顯示 "timeout" 字樣；Debug Log 記 "... timeout → NG"）。
                 if (timeoutMs > 0 && sw.Elapsed.TotalMilliseconds >= timeoutMs)
                 {
-                    LogInfo((waitForOn ? "Power ON timeout (" : "Power OFF timeout (") +
-                            Cfg.PowerWaitTimeoutSec + "s)");
-
+                    LogInfo(waitForOn ? "Power ON timeout → NG" : "Power OFF timeout → NG");
                     if (failOnTimeout && result != null)
                     {
                         var row = new TestStepResult
                         {
                             StepNumber = stepNumber,
-                            StepName = waitForOn ? "Power ON 等待逾時" : "Power OFF 等待逾時",
+                            StepName = waitForOn ? "Power ON" : "Power OFF",
                             RelayCode = "11",
                             Mode = "DC電壓",
                             Range = RangeText(MeasurementMode.DcVoltage),
                             Value = v,
                             Unit = "V",
-                            Pass = false,
-                            LimitTextOverride = waitForOn ? "Power ON Timeout" : "Power OFF Timeout",
+                            LowLimit = waitForOn ? (double?)threshold : null,
+                            HighLimit = waitForOn ? null : (double?)threshold,
+                            Pass = false,                                       // 結果欄 → NG
                             Time = DateTime.Now
                         };
                         result.Steps.Add(row);
@@ -305,7 +323,7 @@ namespace DX01_ShortCircuitTester.Services
                     return false;
                 }
 
-                // 倒數顯示：每秒更新狀態的「Timeout: Ns」（不影響 PollIntervalMs 偵測 / PowerWaitLogIntervalSec Log）。
+                // 倒數顯示：每秒更新「Timeout: Ns」（不影響 PollIntervalMs 偵測 / PowerWaitLogIntervalSec Log）。
                 if (timeoutMs > 0)
                 {
                     int remainSec = (int)Math.Ceiling((timeoutMs - sw.Elapsed.TotalMilliseconds) / 1000.0);
@@ -313,20 +331,30 @@ namespace DX01_ShortCircuitTester.Services
                     if (remainSec != lastShownSec)
                     {
                         lastShownSec = remainSec;
-                        RaiseStatus(status + "  Timeout: " + remainSec + "s");
+                        // 「目前步驟」紅字兩行：Waiting for Power ON... / Timeout: Ns
+                        RaiseInstruction(waitLabel + "...\nTimeout: " + remainSec + "s");
                     }
                 }
 
                 // 等待狀態 Log：每 PowerWaitLogIntervalSec 才輸出一次（避免洗版）。
                 if (sw.Elapsed.TotalMilliseconds >= nextLogMs)
                 {
-                    LogStatus(waitLabel + "... Voltage=" +
-                              v.ToString("0.0000", System.Globalization.CultureInfo.InvariantCulture) + "V");
+                    LogStatus(waitLabel + "... Voltage=" + v.ToString("0.0000", ci) + "V");
                     nextLogMs = sw.Elapsed.TotalMilliseconds + logIntervalMs;
                 }
 
                 await Delay(interval, token);
             }
+        }
+
+        /// <summary>偵測成功：顯示「Power ON/OFF detected.」約 1.5 秒後再進入下一步。</summary>
+        private async Task<bool> PowerDetectedAsync(bool waitForOn, double v, CancellationToken token)
+        {
+            string detected = waitForOn ? "Power ON detected." : "Power OFF detected.";
+            LogInfo(detected + " (" + v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "V)");
+            RaiseInstruction(detected);   // 顯示於「目前步驟」（紅字）
+            await Delay(1500, token);     // 顯示 1~2 秒後進入下一步
+            return true;
         }
 
         /// <summary>記錄一個資訊步驟（無量測值），寫入結果並通知 UI。judgement 可覆寫結果欄（如 Step6 顯示 OK）。</summary>

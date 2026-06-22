@@ -59,7 +59,7 @@ namespace DX01_ShortCircuitTester
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
 
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
-        public const string Version = "V2.2";
+        public const string Version = "V2.3";
 
         // Test 頁底部連線狀態用色：已連線=綠、未連線=紅、連線中=橘
         private enum ConnState { Disconnected, Connecting, Connected }
@@ -1127,9 +1127,11 @@ namespace DX01_ShortCircuitTester
             if (result.HasAnomaly)
                 HandleDeviceAnomaly(result);
 
-            // V2.3：測試結束一律回到「待測」（不停留在失敗的 Step 名稱）；
-            // 大字狀態已顯示 PASS / NG / 停止，最終結果（含原因）顯示於底部狀態列。
+            // V2.3：測試結束「目前步驟」不停留在失敗的 Step 名稱 / Waiting 文字。
+            // 失敗（量測 NG / 設備異常 / Power 逾時）→ 顯示 NG；PASS / 停止 → 待測。
             ResetLiveStatus();
+            if (!result.IsPass && !result.Aborted)
+                SetCurrentStep("NG");
 
             // V2.1 條碼行為：PASS → 清空等待下一顆；NG / 異常 / 停止 → 保留原條碼 + 全選方便重測
             bool pass = !result.Aborted && !result.HasAnomaly && result.IsPass;
@@ -1211,13 +1213,22 @@ namespace DX01_ShortCircuitTester
 
         /// <summary>
         /// V2.3：設定「目前步驟」文字與配色。
-        /// powerInstruction=true（等待 Power 開機 / 關機）→ 紅字，明顯提醒作業員操作；
-        /// 其餘一般步驟 / 狀態 → 黑字。字體粗體由全域字級設定維持（Designer + ApplyUiSettings）。
+        /// powerInstruction=true（等待 Power 開機 / 關機）→ 紅字，明顯提醒作業員操作；其餘 → 黑字。
+        /// 多行文字（如「Waiting for Power ON...\nTimeout: Ns」）：關閉省略號並自動縮小字級，
+        /// 確保兩行於固定高度欄位內完整顯示、不裁切、不重疊（單行狀態維持原字級）。
         /// </summary>
         private void SetCurrentStep(string text, bool powerInstruction = false)
         {
-            lblCurrentStep.Text = text;
+            lblCurrentStep.Text = text ?? "";
             lblCurrentStep.ForeColor = powerInstruction ? Color.Red : Color.Black;
+
+            bool multiLine = lblCurrentStep.Text.IndexOf('\n') >= 0;
+            lblCurrentStep.AutoEllipsis = !multiLine;   // 單行才用省略號；多行不裁切
+
+            int baseSize = Math.Max(8, AppSettings.Current.StepFontSize);
+            float wantSize = multiLine ? Math.Min(baseSize, 13) : baseSize;   // 兩行縮到 ≤13pt 以容納於固定列高
+            if (Math.Abs(lblCurrentStep.Font.Size - wantSize) > 0.1f)
+                lblCurrentStep.Font = new Font(lblCurrentStep.Font.FontFamily, wantSize, FontStyle.Bold);
         }
 
         // ===== 流程事件（皆於 UI 執行緒觸發） =====

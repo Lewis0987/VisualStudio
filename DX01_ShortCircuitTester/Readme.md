@@ -1,10 +1,11 @@
 # V2.3 
 1. 新增 Power ON/OFF 自動偵測功能
 2. 新增 Power 門檻設定（ON/OFF Threshold） "EnablePowerCheckBypass": false 就能恢復正式檢測邏輯，不用再改程式碼。
-3. 優化測試流程自動化與待測切換機制
+3. 優化測試流程及自動化機制
 4. CSV Log 欄位格式重構與量測資料完整化
 5. 提升量產測試穩定性與操作便利性
 6. 調整NG邏輯=>原Retry 3 次 FAIL → 改時間內持續量測NG才FAIL
+7. 測試狀態【NG】邏輯改回立即停止模式
 
 # V2.2 
 Admin（預設 admin000 / admin000）
