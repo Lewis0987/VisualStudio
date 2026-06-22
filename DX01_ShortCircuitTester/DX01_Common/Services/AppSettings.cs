@@ -45,10 +45,7 @@ namespace DX01_ShortCircuitTester.Services
         public double PowerOffThreshold = 5;        // 等待 Power OFF：V <= 此值（請關機）
         public int PowerPollIntervalMs = 500;       // 等待 Power ON/OFF 期間每次量測間隔 (ms)
         public int PowerWaitLogIntervalSec = 30;    // 等待狀態 Log 輸出間隔（秒）：偵測仍每 PowerPollIntervalMs，僅 Log 節流
-
-        // 4c. V2.3 Debug：等待 Power 時的提示 Popup 是否顯示「忽略」按鈕（可跳過偵測直接繼續）。
-        // true＝開發模式（顯示忽略）；量產建議 false（只顯示「確認 / 停止」，強制偵測）。
-        public bool EnablePowerCheckBypass = true;
+        public int PowerWaitTimeoutSec = 60;        // 等待 Power ON/OFF 逾時（秒）：超過仍未達門檻 → NG 停止；<=0 = 無限等待
 
         // 5. 電流條件（流程未使用，保留）
         public double CurrentMin = 0;
@@ -137,7 +134,7 @@ namespace DX01_ShortCircuitTester.Services
                     s.PowerOffThreshold = Num(json, "PowerOffThreshold", s.PowerOffThreshold);
                     s.PowerPollIntervalMs = (int)Num(json, "PowerPollIntervalMs", s.PowerPollIntervalMs);
                     s.PowerWaitLogIntervalSec = (int)Num(json, "PowerWaitLogIntervalSec", s.PowerWaitLogIntervalSec);
-                    s.EnablePowerCheckBypass = Bool(json, "EnablePowerCheckBypass", s.EnablePowerCheckBypass);
+                    s.PowerWaitTimeoutSec = (int)Num(json, "PowerWaitTimeoutSec", s.PowerWaitTimeoutSec);
 
                     s.CurrentMin = Num(json, "current_min", s.CurrentMin);
                     s.CurrentMax = Num(json, "current_max", s.CurrentMax);
@@ -215,7 +212,7 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("PowerOffThreshold", Dbl(PowerOffThreshold)));
             p.Add(Line("PowerPollIntervalMs", PowerPollIntervalMs.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("PowerWaitLogIntervalSec", PowerWaitLogIntervalSec.ToString(CultureInfo.InvariantCulture)));
-            p.Add(Line("EnablePowerCheckBypass", EnablePowerCheckBypass ? "true" : "false"));
+            p.Add(Line("PowerWaitTimeoutSec", PowerWaitTimeoutSec.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("current_min", Dbl(CurrentMin)));
             p.Add(Line("current_max", Dbl(CurrentMax)));
             for (int i = 1; i <= 10; i++)
@@ -288,12 +285,6 @@ namespace DX01_ShortCircuitTester.Services
         {
             Match m = Regex.Match(json, "\"" + Regex.Escape(key) + "\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
             return m.Success ? m.Groups[1].Value.Replace("\\\"", "\"").Replace("\\\\", "\\") : def;
-        }
-
-        private static bool Bool(string json, string key, bool def)
-        {
-            Match m = Regex.Match(json, "\"" + Regex.Escape(key) + "\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
-            return m.Success ? m.Groups[1].Value.Equals("true", StringComparison.OrdinalIgnoreCase) : def;
         }
 
         private static int Hex(string json, string key, int def)

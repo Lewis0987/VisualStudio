@@ -21,14 +21,6 @@ namespace DX01_ShortCircuitTester.Services
         }
     }
 
-    /// <summary>等待 Power ON/OFF 提示 Popup 的使用者決策（V2.3 Debug）。</summary>
-    public enum PowerWaitDecision
-    {
-        Confirm,   // 依正常流程自動偵測，達門檻後繼續
-        Ignore,    // 跳過門檻偵測直接繼續（Debug Bypass）
-        Stop       // 停止測試，回待測
-    }
-
     /// <summary>量測更新事件參數。</summary>
     public sealed class MeasurementEventArgs : EventArgs
     {
@@ -66,12 +58,6 @@ namespace DX01_ShortCircuitTester.Services
 
         /// <summary>除錯日誌（可為 null）；用於記錄各 Step 的等待時間。</summary>
         public DebugLog Log { get; set; }
-
-        /// <summary>
-        /// 等待 Power ON/OFF 前的提示 Popup 回呼（可為 null＝不提示，直接自動偵測）。
-        /// 參數 waitForOn：true=等待開機。回傳 Confirm（正常偵測）/ Ignore（跳過）/ Stop（停止）。由 UI 設定。
-        /// </summary>
-        public Func<bool, PowerWaitDecision> PowerWaitPrompt { get; set; }
 
         public DX01TestFlow(IRelayController relay, IGdm8261AController meter)
         {
@@ -120,8 +106,9 @@ namespace DX01_ShortCircuitTester.Services
 
             try
             {
-                // V2.3 測試前：等待 Power OFF（請將電池 Power 關機，V <= PowerOffThreshold）才開始往下測試
-                await WaitForPowerAsync(false, 0, "等待 Power OFF…", token);
+                // V2.3 測試前：等待 Power OFF（Turn off the battery，V <= PowerOffThreshold）才開始；逾時 → NG 停止
+                if (!await WaitForPowerAsync(false, 0, "Waiting for Power OFF...", result, true, token))
+                    return Finish(result);
 
                 // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位（Relay 由下方狀態欄顯示，標題不重複）
                 RaiseStep(1, "初始化電表", RangeText(MeasurementMode.Resistance));
@@ -137,24 +124,27 @@ namespace DX01_ShortCircuitTester.Services
                 await WaitStep(2, token);
                 AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-", "-", "OK");
 
-                // V2.1：Step3~Step10 任一 NG 不再中止流程，記錄 NG 後繼續執行後續 Step，
-                // 跑完 Step10 才由 Step11 最終判定（任一非資訊步驟 NG → Final Result = NG）。
-                // 僅「設備 / 通訊異常」（例外）才會在下方 catch 立即停止。
+                // V2.3：任一量測 Step 判定 NG → 立即停止流程，不執行後續 Step（最終結果 FAIL）。
+                // 設備 / 通訊異常（例外）亦於下方 catch 立即停止並標記異常（FAIL）。
 
                 // Step 3 外殼對機殼導通：Relay=00，R < 10Ω
-                await MeasureStep(result, 3, "外殼對機殼導通", "00",
-                        MeasurementMode.Resistance, "Ω", null, Cfg.Step3CaseToChassisMax, token);
+                if (!await MeasureStep(result, 3, "外殼對機殼導通", "00",
+                        MeasurementMode.Resistance, "Ω", null, Cfg.Step3CaseToChassisMax, token))
+                    return Finish(result);
 
                 // Step 4 P+ 對外殼絕緣：Relay=01，R > 1MΩ
-                await MeasureStep(result, 4, "P+ 對外殼絕緣", "01",
-                        MeasurementMode.Resistance, "Ω", Cfg.Step4PPlusInsulationMin, null, token);
+                if (!await MeasureStep(result, 4, "P+ 對外殼絕緣", "01",
+                        MeasurementMode.Resistance, "Ω", Cfg.Step4PPlusInsulationMin, null, token))
+                    return Finish(result);
 
                 // Step 5 P- 對外殼絕緣：Relay=10，R > 1MΩ
-                await MeasureStep(result, 5, "P- 對外殼絕緣", "10",
-                        MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token);
+                if (!await MeasureStep(result, 5, "P- 對外殼絕緣", "10",
+                        MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token))
+                    return Finish(result);
 
-                // V2.3 Step 6 先等待 Power ON（請將電池 Power 開機，V >= PowerOnThreshold）才繼續電壓量測
-                await WaitForPowerAsync(true, 6, "等待 Power ON…", token);
+                // V2.3 Step 6 先等待 Power ON（Turn on the battery，V >= PowerOnThreshold）才繼續；逾時 → NG 停止
+                if (!await WaitForPowerAsync(true, 6, "Waiting for Power ON...", result, true, token))
+                    return Finish(result);
 
                 // Step 6 切換電壓量測：DC Voltage、Range 由 Config（無判定值，仍列入結果顯示）
                 string dcRangeLabel = Cfg.DcVoltageRange <= 0
@@ -166,20 +156,24 @@ namespace DX01_ShortCircuitTester.Services
                 AddInfoStep(result, 6, "切換電壓量測", "-", "DC電壓", RangeText(MeasurementMode.DcVoltage), "OK");
 
                 // Step 7 電壓總值：Relay=11，V > 45V（Step7WaitMs 於 READ 前等待，待電壓穩定）。
-                await MeasureStep(result, 7, "電壓總值", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token);
+                if (!await MeasureStep(result, 7, "電壓總值", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step7TotalVoltageMin, null, token))
+                    return Finish(result);
 
                 // Step 8 P+ / P- 電壓：Relay=11，48V ~ 51V
-                await MeasureStep(result, 8, "P+ / P- 電壓", "11",
-                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token);
+                if (!await MeasureStep(result, 8, "P+ / P- 電壓", "11",
+                        MeasurementMode.DcVoltage, "V", Cfg.Step8PPlusMinusMin, Cfg.Step8PPlusMinusMax, token))
+                    return Finish(result);
 
                 // Step 9 P+ 對外殼電壓：Relay=01，V < 1V
-                await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token);
+                if (!await MeasureStep(result, 9, "P+ 對外殼電壓", "01",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step9PPlusToCaseMax, token))
+                    return Finish(result);
 
                 // Step 10 P- 對外殼電壓：Relay=10，V < 1V
-                await MeasureStep(result, 10, "P- 對外殼電壓", "10",
-                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token);
+                if (!await MeasureStep(result, 10, "P- 對外殼電壓", "10",
+                        MeasurementMode.DcVoltage, "V", null, Cfg.Step10PMinusToCaseMax, token))
+                    return Finish(result);
 
                 result.Completed = true;
             }
@@ -206,8 +200,9 @@ namespace DX01_ShortCircuitTester.Services
             {
                 try
                 {
+                    // PASS 後等待 Power OFF；failOnTimeout=false → 逾時僅返回待機，不影響已判定的 PASS。
                     await WaitForPowerAsync(false, 12,
-                        "測試完成 PASS，請將電池 Power 關機（等待 Power OFF…）", token);
+                        "Test PASS - Turn off the battery (Waiting for Power OFF...)", result, false, token);
                 }
                 catch (OperationCanceledException) { /* 操作員停止：保留 PASS，僅返回待機 */ }
                 catch { /* 等待期間設備異常：忽略，不影響已判定的 PASS */ }
@@ -218,17 +213,19 @@ namespace DX01_ShortCircuitTester.Services
 
         /// <summary>
         /// V2.3：等待作業員開 / 關電池 Power。以 DC 電壓模式（Cfg.DcVoltageRange）、Relay=11 持續量測，
-        /// 直到達到門檻才返回（無逾時，只能由取消令 / 停止 中斷）。
+        /// 直到達到門檻（回傳 true）或逾時 PowerWaitTimeoutSec（回傳 false）。
         /// waitForOn=true：等待 V &gt;= PowerOnThreshold（請開機）；false：等待 V &lt;= PowerOffThreshold（請關機）。
-        /// 期間透過 InstructionChanged（指示）/ StatusChanged（狀態）/ Measured（即時電壓）回報 UI。
-        /// 設備 / 通訊異常（READ 失敗）會以例外往上拋，由 RunAsync 統一處理（前置 / Step6 等待 → FAIL；
-        /// PASS 後等待 → 由呼叫端吞掉，不影響已判定的 PASS）。
+        /// failOnTimeout=true（前置 / Step6 等待）：逾時時新增一筆 NG 結果列（判定條件 Power ON/OFF Timeout）並回傳 false，
+        /// 由呼叫端立即停止流程（NG）。failOnTimeout=false（PASS 後等待）：逾時僅返回待機，不影響已判定的 PASS。
+        /// PowerWaitTimeoutSec &lt;= 0 視為無限等待（只能由停止中斷）。暫停期間逾時計時暫停。
+        /// 設備 / 通訊異常（READ 失敗）以例外往上拋，由 RunAsync 統一處理。
         /// </summary>
-        private async Task WaitForPowerAsync(bool waitForOn, int stepNumber, string status, CancellationToken token)
+        private async Task<bool> WaitForPowerAsync(bool waitForOn, int stepNumber, string status,
+            TestResult result, bool failOnTimeout, CancellationToken token)
         {
             double threshold = waitForOn ? Cfg.PowerOnThreshold : Cfg.PowerOffThreshold;
-            string instruction = waitForOn ? "請將電池 Power 開機" : "請將電池 Power 關機";
-            string waitLabel = waitForOn ? "等待 Power ON" : "等待 Power OFF";
+            string instruction = waitForOn ? "Turn on the battery." : "Turn off the battery.";
+            string waitLabel = waitForOn ? "Waiting for Power ON" : "Waiting for Power OFF";
 
             // 供設備異常回報用（不經 RaiseStep，避免在主表格新增列 / 顯示 "Step N —" 標題）
             _currentStepNumber = stepNumber;
@@ -236,26 +233,9 @@ namespace DX01_ShortCircuitTester.Services
 
             RaiseInstruction(instruction);
             RaiseStatus(status);
-            // 一筆永久 Log（檔案 + 畫面）記錄開始等待；之後輪詢電壓改用「狀態行」原地更新，不洗版。
-            LogInfo(instruction + "（" + waitLabel + "，門檻 " + (waitForOn ? "≥ " : "≤ ") +
-                    threshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "V）");
-
-            // V2.3 Debug：等待前提示 Popup（確認 / 忽略 / 停止）。
-            // 確認＝正常自動偵測；忽略＝跳過門檻偵測直接繼續（Debug Bypass）；停止＝中止測試。
-            if (PowerWaitPrompt != null)
-            {
-                PowerWaitDecision decision = PowerWaitPrompt(waitForOn);
-                if (decision == PowerWaitDecision.Stop)
-                {
-                    LogInfo(waitLabel + "：使用者選擇停止");
-                    throw new OperationCanceledException();
-                }
-                if (decision == PowerWaitDecision.Ignore)
-                {
-                    LogInfo(waitLabel + "：忽略（Debug Bypass）→ 跳過門檻偵測，直接繼續");
-                    return;
-                }
-            }
+            // 一筆永久 Log 記錄開始等待；之後等待狀態每 PowerWaitLogIntervalSec 才輸出一次，不洗版。
+            LogInfo(instruction + " (" + waitLabel + ", threshold " + (waitForOn ? ">= " : "<= ") +
+                    threshold.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "V)");
 
             _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
             SwitchRelay("11");
@@ -263,21 +243,26 @@ namespace DX01_ShortCircuitTester.Services
 
             int interval = Cfg.PowerPollIntervalMs > 0 ? Cfg.PowerPollIntervalMs : 500;
             long logIntervalMs = (long)(Cfg.PowerWaitLogIntervalSec > 0 ? Cfg.PowerWaitLogIntervalSec : 30) * 1000;
+            long timeoutMs = (long)(Cfg.PowerWaitTimeoutSec > 0 ? Cfg.PowerWaitTimeoutSec : 0) * 1000;   // 0 = 無限
             var sw = System.Diagnostics.Stopwatch.StartNew();
             double nextLogMs = 0;   // 0 → 進入等待立即輸出第一筆狀態，之後每 logIntervalMs 一次
+            int lastShownSec = -1;  // 已顯示的 Timeout 倒數秒數（每秒變動才更新狀態）
 
             while (true)
             {
                 token.ThrowIfCancellationRequested();
 
-                // 暫停中：停止偵測與狀態輸出，僅顯示一次提示；恢復後重新開始計時並立即再輸出一筆。
+                // 暫停中：停止偵測與狀態輸出，逾時計時亦暫停；恢復後重新計時並立即再輸出一筆。
                 if (IsPaused)
                 {
-                    LogInfo("測試暫停，Power 偵測暫停");
+                    sw.Stop();
+                    LogInfo("Test paused. Power detection paused.");
                     await WaitWhilePausedAsync(token);   // 阻塞至「繼續」(Resume) 或「停止」(取消)
                     RaiseInstruction(instruction);       // 恢復後重新顯示紅字指示
                     RaiseStatus(status);
+                    sw.Start();
                     nextLogMs = sw.Elapsed.TotalMilliseconds;   // 恢復後立即輸出一筆並重新計時
+                    lastShownSec = -1;                          // 恢復後立即重畫倒數
                 }
 
                 // 靜默讀取：送 READ? 取得電壓，但不寫 TX/RX Log（偵測仍維持 PollIntervalMs，不受 Log 節流影響）。
@@ -287,10 +272,49 @@ namespace DX01_ShortCircuitTester.Services
                 bool reached = waitForOn ? (v >= threshold) : (v <= threshold);
                 if (reached)
                 {
-                    // 偵測成功立即輸出（不受等待 Log 節流限制）：Power ON/OFF detected (xx.xxV)
-                    LogInfo((waitForOn ? "Power ON detected (" : "Power OFF detected (") +
+                    // 偵測成功立即輸出（不受等待 Log 節流限制）：Power ON/OFF detected. (xx.xxV)
+                    LogInfo((waitForOn ? "Power ON detected. (" : "Power OFF detected. (") +
                             v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "V)");
-                    break;
+                    return true;
+                }
+
+                // 逾時判定：超過 PowerWaitTimeoutSec 仍未達門檻 → NG（前置/Step6 加一筆結果列並停止；PASS 後僅返回）。
+                if (timeoutMs > 0 && sw.Elapsed.TotalMilliseconds >= timeoutMs)
+                {
+                    LogInfo((waitForOn ? "Power ON timeout (" : "Power OFF timeout (") +
+                            Cfg.PowerWaitTimeoutSec + "s)");
+
+                    if (failOnTimeout && result != null)
+                    {
+                        var row = new TestStepResult
+                        {
+                            StepNumber = stepNumber,
+                            StepName = waitForOn ? "Power ON 等待逾時" : "Power OFF 等待逾時",
+                            RelayCode = "11",
+                            Mode = "DC電壓",
+                            Range = RangeText(MeasurementMode.DcVoltage),
+                            Value = v,
+                            Unit = "V",
+                            Pass = false,
+                            LimitTextOverride = waitForOn ? "Power ON Timeout" : "Power OFF Timeout",
+                            Time = DateTime.Now
+                        };
+                        result.Steps.Add(row);
+                        StepCompleted?.Invoke(this, row);
+                    }
+                    return false;
+                }
+
+                // 倒數顯示：每秒更新狀態的「Timeout: Ns」（不影響 PollIntervalMs 偵測 / PowerWaitLogIntervalSec Log）。
+                if (timeoutMs > 0)
+                {
+                    int remainSec = (int)Math.Ceiling((timeoutMs - sw.Elapsed.TotalMilliseconds) / 1000.0);
+                    if (remainSec < 0) remainSec = 0;
+                    if (remainSec != lastShownSec)
+                    {
+                        lastShownSec = remainSec;
+                        RaiseStatus(status + "  Timeout: " + remainSec + "s");
+                    }
                 }
 
                 // 等待狀態 Log：每 PowerWaitLogIntervalSec 才輸出一次（避免洗版）。

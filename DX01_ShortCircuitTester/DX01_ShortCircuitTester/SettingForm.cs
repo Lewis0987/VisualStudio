@@ -23,9 +23,7 @@ namespace DX01_ShortCircuitTester
         // 4. 電壓
         private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper, txtDcVoltageRange;
         // 4b. V2.3 Power ON/OFF 自動偵測門檻
-        private TextBox txtPowerOnThreshold, txtPowerOffThreshold, txtPowerPollIntervalMs, txtPowerWaitLogIntervalSec;
-        // 4c. V2.3 Debug：等待 Power 提示是否顯示「忽略」按鈕
-        private ComboBox cbEnablePowerCheckBypass;
+        private TextBox txtPowerOnThreshold, txtPowerOffThreshold, txtPowerPollIntervalMs, txtPowerWaitLogIntervalSec, txtPowerWaitTimeoutSec;
         // 5. 電流
         private TextBox txtCurrentMin, txtCurrentMax;
         // 6. Step 等待
@@ -107,7 +105,7 @@ namespace DX01_ShortCircuitTester
             txtPowerOffThreshold = TxtRow("Power OFF 門檻 (V)");
             txtPowerPollIntervalMs = TxtRow("Power 偵測間隔 (ms)");
             txtPowerWaitLogIntervalSec = TxtRow("Power 等待 Log 間隔 (s)");
-            cbEnablePowerCheckBypass = ComboRow("顯示「忽略」按鈕 (Debug)", new[] { "true", "false" });
+            txtPowerWaitTimeoutSec = TxtRow("Power 等待逾時 (s)");
 
             Header("5. 電流條件 (保留)");
             txtCurrentMin = TxtRow("CurrentMin(A)");
@@ -189,8 +187,7 @@ namespace DX01_ShortCircuitTester
             txtPowerOffThreshold.Text = Dbl(c.PowerOffThreshold);
             txtPowerPollIntervalMs.Text = c.PowerPollIntervalMs.ToString(CultureInfo.InvariantCulture);
             txtPowerWaitLogIntervalSec.Text = c.PowerWaitLogIntervalSec.ToString(CultureInfo.InvariantCulture);
-            cbEnablePowerCheckBypass.SelectedItem = c.EnablePowerCheckBypass ? "true" : "false";
-            if (cbEnablePowerCheckBypass.SelectedIndex < 0) cbEnablePowerCheckBypass.SelectedItem = "true";
+            txtPowerWaitTimeoutSec.Text = c.PowerWaitTimeoutSec.ToString(CultureInfo.InvariantCulture);
 
             txtCurrentMin.Text = Dbl(c.CurrentMin);
             txtCurrentMax.Text = Dbl(c.CurrentMax);
@@ -262,7 +259,7 @@ namespace DX01_ShortCircuitTester
               .Append(txtVoltUpper.Text).Append('|').Append(txtVoltLower.Text).Append('|')
               .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|').Append(txtDcVoltageRange.Text).Append('|')
               .Append(txtPowerOnThreshold.Text).Append('|').Append(txtPowerOffThreshold.Text).Append('|').Append(txtPowerPollIntervalMs.Text).Append('|')
-              .Append(txtPowerWaitLogIntervalSec.Text).Append('|').Append(cbEnablePowerCheckBypass.SelectedItem).Append('|')
+              .Append(txtPowerWaitLogIntervalSec.Text).Append('|').Append(txtPowerWaitTimeoutSec.Text).Append('|')
               .Append(txtCurrentMin.Text).Append('|').Append(txtCurrentMax.Text).Append('|');
             for (int i = 1; i <= 10; i++)
                 sb.Append(_stepBoxes[i].Text).Append('|');
@@ -311,6 +308,9 @@ namespace DX01_ShortCircuitTester
             int powerWaitLog;
             if (!PI(txtPowerWaitLogIntervalSec, "Power 等待 Log 間隔", out powerWaitLog, ref err)) return false;
             if (powerWaitLog < 1) { err = "Power 等待 Log 間隔必須 >= 1 秒。"; return false; }
+            int powerWaitTimeout;
+            if (!PI(txtPowerWaitTimeoutSec, "Power 等待逾時", out powerWaitTimeout, ref err)) return false;
+            if (powerWaitTimeout < 0) { err = "Power 等待逾時不可為負數（0 = 無限等待）。"; return false; }
 
             int popup, font, poll, readTo, relayDelay;
             if (!PI(txtPopupSeconds, "PopupSeconds", out popup, ref err)) return false;
@@ -349,7 +349,7 @@ namespace DX01_ShortCircuitTester
             c.PowerOffThreshold = powerOff;
             c.PowerPollIntervalMs = powerPoll;
             c.PowerWaitLogIntervalSec = powerWaitLog;
-            c.EnablePowerCheckBypass = string.Equals(cbEnablePowerCheckBypass.SelectedItem as string, "true", StringComparison.OrdinalIgnoreCase);
+            c.PowerWaitTimeoutSec = powerWaitTimeout;
 
             c.CurrentMin = curMin;
             c.CurrentMax = curMax;

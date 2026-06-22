@@ -43,9 +43,6 @@ namespace DX01_ShortCircuitTester
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
 
-        // V2.3：同一 Label 的累計測試次數（每開始一次完整測試 +1；含 PASS / FAIL / 停止）。整個 session 保留。
-        private readonly Dictionary<string, int> _testCounts = new Dictionary<string, int>();
-
         // 避免同一次斷線重複跳出「LAN 連線中斷」提示；連線成功後重置
         private bool _lanLostShown;
 
@@ -385,37 +382,7 @@ namespace DX01_ShortCircuitTester
             _flow.StepCompleted += Flow_StepCompleted;
             _flow.StatusChanged += Flow_StatusChanged;
             _flow.InstructionChanged += Flow_InstructionChanged;
-            _flow.PowerWaitPrompt = OnPowerWaitPrompt;   // V2.3 Debug：等待 Power 前提示 Popup
-        }
-
-        /// <summary>
-        /// V2.3 Debug：等待 Power ON/OFF 前的提示 Popup（於流程內、UI 執行緒同步呼叫）。
-        /// 確認＝正常自動偵測；忽略＝跳過偵測直接繼續（僅 EnablePowerCheckBypass=true 顯示）；停止＝停止測試。
-        /// </summary>
-        private PowerWaitDecision OnPowerWaitPrompt(bool waitForOn)
-        {
-            string instr = waitForOn ? "請將電池 Power 開機" : "請將電池 Power 關機";
-            string title = waitForOn ? "等待 Power ON" : "等待 Power OFF";
-            bool bypass = AppSettings.Current.EnablePowerCheckBypass;
-
-            string msg = instr + "\n\n" +
-                "【確認】依正常流程自動偵測電壓，達門檻後繼續。\n" +
-                (bypass ? "【忽略】跳過偵測直接繼續（Debug）。\n" : "") +
-                "【停止】停止測試，回到待測。";
-
-            // 按鈕索引：bypass → 0=停止 1=忽略 2=確認；非 bypass → 0=停止 1=確認。Enter=最右（確認）。
-            int r = bypass
-                ? MsgBox.Show(this, title, msg, MessageBoxIcon.Question, "停止", "忽略", "確認")
-                : MsgBox.Show(this, title, msg, MessageBoxIcon.Question, "停止", "確認");
-
-            if (bypass && r == 2) return PowerWaitDecision.Confirm;
-            if (bypass && r == 1) return PowerWaitDecision.Ignore;
-            if (!bypass && r == 1) return PowerWaitDecision.Confirm;
-
-            // 0（停止）或 -1（關閉視窗）→ 停止測試
-            _userStopped = true;
-            if (_debugLog != null) _debugLog.Write(LogKind.Error, "等待 Power：使用者於提示視窗選擇停止");
-            return PowerWaitDecision.Stop;
+            // V2.3：Power ON/OFF 改為完全自動偵測（門檻控制），不再有提示 Popup / 忽略跳過機制。
         }
 
         /// <summary>啟動時嘗試連線（Relay 由 HID 自動偵測，電表用目前選擇的 COM）。</summary>
@@ -1005,14 +972,10 @@ namespace DX01_ShortCircuitTester
             if (_running)
                 return;
 
-            // V2.2：未登入禁止測試 → 先跳登入視窗；仍未登入則中止
-            if (!_auth.IsLoggedIn)
-            {
-                if (!PromptLogin())
-                    return;
-            }
+            // V2.3：TEST 頁不需登入 → 掃描條碼 / 開始測試不再跳權限驗證。
+            // 登入僅在切換到 Settings / Debug Log 等管理功能時觸發（TabMain_Selecting）。
 
-            // 設備未連線屬「測試前檢查失敗」→ 判定 FAIL（左：請重新測試 / 右：FAIL）
+            // 設備未連線屬「測試前檢查失敗」→ 統一顯示 NG（目前步驟→待測 / 大字→NG）
             if (!_meter.IsConnected)
             {
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "電表未連線");
@@ -1051,10 +1014,6 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Start Test");
             }
 
-            // V2.3：同一 Label 累計測試次數 +1（每開始一次完整測試流程；含 PASS / FAIL / 停止）。
-            int prevCount;
-            _testCounts[sn] = (_testCounts.TryGetValue(sn, out prevCount) ? prevCount : 0) + 1;
-
             // V2.3：移除舊「Step 0 Power DC 48V 檢查」與忽略/確定彈窗；
             // 改由 DX01TestFlow 內自動偵測：測試前等待 Power OFF → Step6 等待 Power ON → PASS 後等待 Power OFF。
             // 重置畫面（Return to Step1），固定新增「序號」列（工號不顯示於表格，僅記於 Debug Log / 底部）
@@ -1062,7 +1021,7 @@ namespace DX01_ShortCircuitTester
             AddSerialRow(sn);
             lblMeasure.Text = "---";
             lblRelay.Text = "--";
-            SetCurrentStep("請將電池 Power 關機", true);   // 流程啟動後立即等待 Power OFF（紅字）
+            SetCurrentStep("Turn off the battery.", true);   // 流程啟動後立即等待 Power OFF（紅字）
             SetResult("測試中", Color.White, Color.RoyalBlue);
             SetRunningState(true);
 
@@ -1077,14 +1036,13 @@ namespace DX01_ShortCircuitTester
             }
             catch (Exception ex)
             {
-                // 系統例外：屬設備異常 / 測試前檢查失敗類 → 判定 FAIL（左 請重新測試 / 右 FAIL）
+                // 系統例外：屬設備異常 → 統一顯示 NG（目前步驟→待測 / 大字→NG），立即停止
                 lblInfo.Text = "測試發生例外: " + ex.Message;
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "測試例外：" + ex.Message);
                 SetTestControlsEnabled(false);
                 SetRunningState(false);
                 UpdateConnStatus(); // 設備可能因例外失聯，更新狀態
-                ResetLiveStatus();
-                ShowFailStatus();
+                ShowFailStatus();   // 內含 ResetLiveStatus（目前步驟→待測）
                 KeepBarcodeForRetry(sn);
                 return;
             }
@@ -1126,31 +1084,22 @@ namespace DX01_ShortCircuitTester
             // V2.1：測試結束 → 停用暫停 / 停止
             SetTestControlsEnabled(false);
 
-            // Step11 FinalResult：全流程跑完後才更新大型判定 Label。
-            // 停止＝使用者停止 / 中止；FAIL＝設備異常；PASS＝合格；NG＝Step1~Step9 量測不合格。
+            // V2.3 FinalResult（任一 Step NG 或異常即停止）：
+            // 停止＝使用者停止 / 中止；PASS＝全部合格；其餘（量測不合格或設備異常）＝統一顯示 NG。
             if (result.Aborted)
                 SetResult("停止", Color.White, Color.DarkOrange);
-            else if (result.HasAnomaly)
-                SetResult("FAIL", Color.White, NgRed);
             else if (result.IsPass)
                 SetResult("PASS", Color.White, OkGreen);
             else
-                SetResult("NG", Color.White, NgRed);
+                SetResult("NG", Color.White, NgRed);   // 量測 NG 或設備異常 → 統一顯示 NG
 
-            // V2.3：帶入此 Label 的累計測試次數（StartTest 已 +1）。
-            int testCount;
-            result.TestCount = (!string.IsNullOrEmpty(result.SerialNumber) &&
-                                _testCounts.TryGetValue(result.SerialNumber, out testCount)) ? testCount : 0;
-
-            // V2.2：Debug Log 記錄操作者與最終結果；V2.3 加記 Label / TestCount（流程結束一律顯示）
+            // V2.2：Debug Log 記錄操作者與最終結果（不顯示 FAIL，統一 NG；設備異常於括號保留供追溯）
             if (_debugLog != null)
             {
                 string verdict = result.Aborted ? (_userStopped ? "STOP" : "ABORT")
-                    : (result.HasAnomaly ? "FAIL (設備異常)" : (result.IsPass ? "PASS" : "NG"));
+                    : (result.IsPass ? "PASS" : (result.HasAnomaly ? "NG (設備異常)" : "NG"));
                 _debugLog.Write(LogKind.Info, "Operator : " + result.OperatorId);
                 _debugLog.Write(LogKind.Info, "Result : " + verdict);
-                _debugLog.Write(LogKind.Info, "Label : " + result.SerialNumber);
-                _debugLog.Write(LogKind.Info, "TestCount : " + result.TestCount);
             }
 
             // V2.3：僅「PASS」寫入 CSV（FAIL / NG / 停止 / 設備異常皆不寫，CSV 只保留正式通過產品紀錄）。
@@ -1178,12 +1127,9 @@ namespace DX01_ShortCircuitTester
             if (result.HasAnomaly)
                 HandleDeviceAnomaly(result);
 
-            // Step12 Return Step1：恢復 Relay / 量測顯示（左側預設「待測」，適用 PASS / NG）
+            // V2.3：測試結束一律回到「待測」（不停留在失敗的 Step 名稱）；
+            // 大字狀態已顯示 PASS / NG / 停止，最終結果（含原因）顯示於底部狀態列。
             ResetLiveStatus();
-
-            // 停止 / FAIL：左側改顯示「請重新測試」（PASS / NG 維持「待測」）
-            if (result.Aborted || result.HasAnomaly)
-                SetCurrentStep("請重新測試");
 
             // V2.1 條碼行為：PASS → 清空等待下一顆；NG / 異常 / 停止 → 保留原條碼 + 全選方便重測
             bool pass = !result.Aborted && !result.HasAnomaly && result.IsPass;
@@ -1247,11 +1193,11 @@ namespace DX01_ShortCircuitTester
             }
         }
 
-        /// <summary>FAIL 狀態顯示：左側「請重新測試」、右側大狀態「FAIL」（測試前檢查失敗 / 設備異常 / 例外）。</summary>
+        /// <summary>失敗狀態顯示：目前步驟回「待測」、右側大狀態「NG」（測試前檢查失敗 / 設備異常 / 例外）。</summary>
         private void ShowFailStatus()
         {
-            SetCurrentStep("請重新測試");
-            SetResult("FAIL", Color.White, NgRed);
+            ResetLiveStatus();                       // 目前步驟→待測、Relay→--、量測→---
+            SetResult("NG", Color.White, NgRed);
         }
 
         /// <summary>Step12 Return Step1：恢復目前步驟=待測、Relay=--、量測值=---（保留結果與表格）。</summary>
@@ -1432,7 +1378,7 @@ namespace DX01_ShortCircuitTester
                 btnOpenLogDir.Enabled = admin && !testing;
             }
 
-            // 登出：登入後才顯示；測試中停用。（無登入按鈕，登入改自動觸發）
+            // V2.3：登出按鈕：登入後（OP / Admin 皆）顯示於 TEST 頁 [登出][暫停][停止]；未登入隱藏；測試中停用。
             if (btnLogout != null)
             {
                 btnLogout.Visible = loggedIn;
@@ -1451,22 +1397,18 @@ namespace DX01_ShortCircuitTester
             if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
             if (gbDevInfo != null) gbDevInfo.Visible = admin;       // GDM Identify / Relay VID/PID
             if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定
-            //   分頁：OP 登入後只保留 Test；未登入（登入入口）與 Admin 顯示 Settings / Debug Log。
-            //   （底部「電表 / Relay 連線狀態」恆顯示，OP 測試時仍可得知設備連線。）
-            bool showAdminTabs = admin || !loggedIn;
-            SetTabVisible(tabDevice, showAdminTabs);   // 設備設定（Settings）整個分頁
-            SetTabVisible(tabLog, showAdminTabs);      // Debug Log 整個分頁
+            //   分頁：Settings 在「未登入（登入入口）或 Admin」顯示；OP 登入後隱藏（OP 僅保留 Test 頁）。
+            //   Debug Log 僅 Admin。
+            SetTabVisible(tabDevice, admin || !loggedIn);   // 設備設定（Settings）
+            SetTabVisible(tabLog, admin);                   // Debug Log：僅 Admin
 
+            // V2.3：底部帳戶狀態（Version 右側 / 連線狀態左側）：未登入空白；Admin : 工號 / OP : 工號。
             if (lblOperator != null)
             {
-                // 未登入：OP：未登入 / Operator：OP：工號 / Admin：Admin：工號
-                if (!loggedIn)
-                    lblOperator.Text = "OP：未登入";
-                else if (admin)
-                    lblOperator.Text = "Admin：" + _auth.OperatorId;
-                else
-                    lblOperator.Text = "OP：" + _auth.OperatorId;
-                lblOperator.ForeColor = loggedIn ? OkGreen : Color.Red;
+                lblOperator.Visible = true;
+                lblOperator.Text = !loggedIn ? ""
+                    : (admin ? "Admin : " + _auth.OperatorId : "OP : " + _auth.OperatorId);
+                lblOperator.ForeColor = OkGreen;
             }
 
             // 登入 / 登出即時切換右下角 USB Relay 控制區（僅 Admin 顯示）
@@ -1599,12 +1541,16 @@ namespace DX01_ShortCircuitTester
                 }
                 int total = pass + fail;
 
-                string verdict = result.HasAnomaly ? "設備異常" : result.Judgement;
-                text = string.Format("總Step數: {0}    PASS: {1}    FAIL: {2}    最後結果: {3}",
-                    total, pass, fail, verdict);
+                // 最後結果含原因：設備異常 → NG (AnomalyType，如 LAN Disconnect)；
+                // 量測 NG → NG (Step N StepName)；PASS / 中止 → 直接顯示。
+                string verdict = result.Judgement;   // PASS / NG / 中止
+                if (result.HasAnomaly && !string.IsNullOrEmpty(result.AnomalyType))
+                    verdict += " (" + result.AnomalyType + ")";
+                else if (!result.IsPass && !result.Aborted && result.FirstFailedStep != null)
+                    verdict += " (Step " + result.FirstFailedStep.StepNumber + " " + result.FirstFailedStep.StepName + ")";
 
-                if (!result.IsPass && !result.Aborted && result.FirstFailedStep != null)
-                    text += " (Step " + result.FirstFailedStep.StepNumber + " " + result.FirstFailedStep.StepName + ")";
+                text = string.Format("總Step數: {0}    PASS: {1}    NG: {2}    最後結果: {3}",
+                    total, pass, fail, verdict);
             }
 
             if (!string.IsNullOrEmpty(logFile))

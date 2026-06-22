@@ -44,6 +44,9 @@ namespace DX01_ShortCircuitTester.Models
         /// <summary>設備異常訊息；正常步驟為 null。</summary>
         public string ErrorMessage { get; set; }
 
+        /// <summary>判定條件欄文字覆寫（如 Power 等待逾時顯示 "Power ON Timeout"）；null 時用上下限預設邏輯。</summary>
+        public string LimitTextOverride { get; set; }
+
         /// <summary>量測值的 UI 顯示字串（精簡、≤約 10 碼；不影響判定與 CSV 原始值）。</summary>
         public string ValueText
         {
@@ -55,6 +58,8 @@ namespace DX01_ShortCircuitTester.Models
         {
             get
             {
+                if (LimitTextOverride != null)
+                    return LimitTextOverride;
                 if (IsInfo)
                     return "—";
                 if (LowLimit.HasValue && HighLimit.HasValue)
@@ -130,9 +135,6 @@ namespace DX01_ShortCircuitTester.Models
 
         /// <summary>執行此測試的操作者工號（人員追溯用；不含密碼）。</summary>
         public string OperatorId { get; set; }
-
-        /// <summary>V2.3：同一 Label 的累計測試次數（含 PASS / FAIL / 停止）；寫入 CSV 供重測追蹤。</summary>
-        public int TestCount { get; set; }
 
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
