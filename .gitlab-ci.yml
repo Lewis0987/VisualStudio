@@ -3,5 +3,7 @@ stages:
 
 test_job:
   stage: test
+  tags:
+    - windows
   script:
     - echo "DX01 CI Test"
