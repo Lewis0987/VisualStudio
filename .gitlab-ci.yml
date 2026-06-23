@@ -1,9 +1,11 @@
 stages:
-  - test
+  - build
 
-test_job:
-  stage: test
+build_dx01:
+  stage: build
   tags:
     - windows
+
   script:
-    - echo "DX01 CI Test"
+    - cd DX01_ShortCircuitTester
+    - dir
