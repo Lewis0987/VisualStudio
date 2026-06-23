@@ -6,5 +6,6 @@ build_dx01:
   tags:
     - windows
   script:
+    - cd DX01_ShortCircuitTester
     - dotnet restore
     - dotnet build DX01_ShortCircuitTester.sln -c Release
