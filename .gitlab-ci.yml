@@ -1,0 +1,10 @@
+stages:
+  - build
+
+build_dx01:
+  stage: build
+  tags:
+    - windows
+  script:
+    - dotnet restore
+    - dotnet build DX01_ShortCircuitTester.sln -c Release
