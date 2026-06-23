@@ -8,4 +8,5 @@ build_dx01:
 
   script:
     - cd DX01_ShortCircuitTester
+    - dir
     - .\build.bat
