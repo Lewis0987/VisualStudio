@@ -8,4 +8,4 @@ build_dx01:
 
   script:
     - cd DX01_ShortCircuitTester
-    - dir
+    - msbuild DX01_ShortCircuitTester.sln /p:Configuration=Release
