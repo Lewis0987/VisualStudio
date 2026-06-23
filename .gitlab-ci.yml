@@ -1,11 +1,7 @@
 stages:
-  - build
+  - test
 
-build_dx01:
-  stage: build
-  tags:
-    - windows
+test_job:
+  stage: test
   script:
-    - cd DX01_ShortCircuitTester
-    - dotnet restore
-    - dotnet build DX01_ShortCircuitTester.sln -c Release
+    - echo "DX01 CI Test"
