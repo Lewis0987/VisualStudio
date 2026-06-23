@@ -8,4 +8,7 @@ build_dx01:
 
   script:
     - cd DX01_ShortCircuitTester
-    - "& 'C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe' DX01_ShortCircuitTester.sln /p:Configuration=Release"
+    - |
+      & "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" `
+      DX01_ShortCircuitTester.sln `
+      /p:Configuration=Release
