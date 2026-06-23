@@ -6,6 +6,7 @@
 5. 提升量產測試穩定性與操作便利性
 6. 調整NG邏輯=>原Retry 3 次 FAIL → 改時間內持續量測NG才FAIL
 7. 測試狀態【NG】邏輯改回立即停止模式
+8. 測試步驟 增加 timeout倒數秒數顯示
 
 # V2.2 
 Admin（預設 admin000 / admin000）
@@ -129,3 +130,5 @@ DX01Config.json 統一管理
 # first upload V1.0
 V1.0<br>
 DX01_專案外殼短路判斷流程<br>
+G1G2 = Ground / 外殼探棒<br>
+P+P- = Power / 電池正負極<br>

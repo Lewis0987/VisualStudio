@@ -224,18 +224,17 @@ namespace DX01_ShortCircuitTester.Services
         {
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             double threshold = waitForOn ? Cfg.PowerOnThreshold : Cfg.PowerOffThreshold;
-            string instruction = waitForOn ? "Turn on the battery." : "Turn off the battery.";
             string waitLabel = waitForOn ? "Waiting for Power ON" : "Waiting for Power OFF";
 
             // 供設備異常回報用（不經 RaiseStep，避免在主表格新增列 / 顯示 "Step N —" 標題）
             _currentStepNumber = stepNumber;
-            _currentStepName = instruction;
+            _currentStepName = waitLabel;
 
-            // Power 等待文字（指示 / Waiting / Timeout / detected）一律顯示於「目前步驟」紅字（RaiseInstruction）；
+            // V2.3：「目前步驟」紅字直接顯示等待狀態 + Timeout 倒數（不再顯示 "Turn on/off the battery." 以免重複提示）；
             // 底部狀態列只保留一般狀態（測試中）。
-            RaiseInstruction(instruction);
+            RaiseInstruction(waitLabel + "...");
             RaiseStatus("測試中…");
-            LogInfo(instruction + " (" + waitLabel + ", threshold " + (waitForOn ? ">= " : "<= ") +
+            LogInfo(waitLabel + " (threshold " + (waitForOn ? ">= " : "<= ") +
                     threshold.ToString("0.###", ci) + "V)");
 
             _meter.SetDcVoltageModeWithRange(Cfg.DcVoltageRange);
@@ -245,33 +244,7 @@ namespace DX01_ShortCircuitTester.Services
             int interval = Cfg.PowerPollIntervalMs > 0 ? Cfg.PowerPollIntervalMs : 500;
             long logIntervalMs = (long)(Cfg.PowerWaitLogIntervalSec > 0 ? Cfg.PowerWaitLogIntervalSec : 30) * 1000;
             long timeoutMs = (long)(Cfg.PowerWaitTimeoutSec > 0 ? Cfg.PowerWaitTimeoutSec : 0) * 1000;   // 0 = 無限
-            const int InstructionHoldMs = 3000;   // 階段1：操作指示維持時間（讓 OP 先看清要做什麼）
-
-            // ── 階段1：顯示「Turn on/off the battery.」約 3 秒（期間仍偵測；若已達門檻則提前完成）。
-            var holdSw = System.Diagnostics.Stopwatch.StartNew();
-            while (holdSw.Elapsed.TotalMilliseconds < InstructionHoldMs)
-            {
-                token.ThrowIfCancellationRequested();
-                if (IsPaused)
-                {
-                    holdSw.Stop();
-                    LogInfo("Test paused. Power detection paused.");
-                    await WaitWhilePausedAsync(token);
-                    RaiseInstruction(instruction);   // 恢復後重新顯示紅字指示於「目前步驟」
-                    holdSw.Start();
-                }
-
-                double pv = _meter.ReadQuiet();
-                Measured?.Invoke(this, new MeasurementEventArgs(pv, "V"));
-                if (waitForOn ? (pv >= threshold) : (pv <= threshold))
-                    return await PowerDetectedAsync(waitForOn, pv, token);
-
-                await Delay(interval, token);
-            }
-
-            // ── 階段2：「目前步驟」改顯示「Waiting for Power ON/OFF...」並開始每秒倒數 Timeout / 逾時計時。
-            RaiseInstruction(waitLabel + "...");
-            var sw = System.Diagnostics.Stopwatch.StartNew();   // 逾時自階段2開始計
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             double nextLogMs = 0;
             int lastShownSec = -1;
 

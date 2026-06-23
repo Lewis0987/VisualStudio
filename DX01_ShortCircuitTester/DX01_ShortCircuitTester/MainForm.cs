@@ -1021,7 +1021,7 @@ namespace DX01_ShortCircuitTester
             AddSerialRow(sn);
             lblMeasure.Text = "---";
             lblRelay.Text = "--";
-            SetCurrentStep("Turn off the battery.", true);   // 流程啟動後立即等待 Power OFF（紅字）
+            SetCurrentStep("Waiting for Power OFF...", true);   // 流程啟動後立即等待 Power OFF（紅字；不顯示 Turn off the battery.）
             SetResult("測試中", Color.White, Color.RoyalBlue);
             SetRunningState(true);
 
@@ -1404,14 +1404,14 @@ namespace DX01_ShortCircuitTester
             }
 
             // V2.3 角色 UI 顯示：
-            //   工程 / 管理功能（設備測試 / 設備資訊 / 參數設定）僅 Admin 可見。
+            //   Settings 內僅「GDM 連線區 / Relay 連線區」OP 可用；其餘工程 / 管理功能僅 Admin 可見：
+            //   設備測試 / 電表測試、設備資訊（GDM Identify / Relay VID/PID）、參數設定、帳號管理。
             if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
             if (gbDevInfo != null) gbDevInfo.Visible = admin;       // GDM Identify / Relay VID/PID
             if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定
-            //   分頁：Settings 在「未登入（登入入口）或 Admin」顯示；OP 登入後隱藏（OP 僅保留 Test 頁）。
-            //   Debug Log 僅 Admin。
-            SetTabVisible(tabDevice, admin || !loggedIn);   // 設備設定（Settings）
-            SetTabVisible(tabLog, admin);                   // Debug Log：僅 Admin
+            //   分頁：Settings（設備設定）OP / Admin 皆可見（OP 僅連線區）；Debug Log 僅 Admin。
+            SetTabVisible(tabDevice, true);   // 設備設定（Settings）：含 GDM / Relay 連線區，OP 亦可重連
+            SetTabVisible(tabLog, admin);     // Debug Log：僅 Admin
 
             // V2.3：底部帳戶狀態（Version 右側 / 連線狀態左側）：未登入空白；Admin : 工號 / OP : 工號。
             if (lblOperator != null)
