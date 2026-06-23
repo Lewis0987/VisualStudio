@@ -9,4 +9,9 @@ build_dx01:
   script:
     - cd DX01_ShortCircuitTester
     - dotnet restore DX01_ShortCircuitTester.sln
-    - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
+    - .\build.bat
+
+  artifacts:
+    paths:
+      - DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Debug/net48/
+    expire_in: 7 days
