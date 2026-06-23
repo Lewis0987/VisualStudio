@@ -12,7 +12,8 @@ build_dx01:
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
 
   artifacts:
-    when: always
-    paths:
-      - DX01_ShortCircuitTester/**/bin/Debug/net48/
-    expire_in: 7 days
+  name: "DX01_V2.3_Build$CI_PIPELINE_ID"
+  when: always
+  paths:
+    - DX01_ShortCircuitTester/**/bin/Debug/net48/
+  expire_in: 7 days
