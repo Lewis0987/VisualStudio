@@ -143,6 +143,9 @@ namespace DX01_ShortCircuitTester.Models
         /// <summary>是否發生設備 / 網路異常（立即停止流程）。</summary>
         public bool HasAnomaly { get; set; }
 
+        /// <summary>V2.5：最後關機確認（Step11）倒數逾時仍未偵測到 Power OFF → NG（供 UI 顯示專屬訊息）。</summary>
+        public bool FinalPowerOffTimeout { get; set; }
+
         /// <summary>設備異常類型（分類字串，如 LAN Timeout）。</summary>
         public string AnomalyType { get; set; }
 

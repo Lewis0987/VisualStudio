@@ -107,7 +107,7 @@ namespace DX01_ShortCircuitTester.Services
             try
             {
                 // V2.4 測試前：等待 Power OFF（Turn off the battery，V <= PowerOffThreshold）才開始；逾時 → NG 停止
-                if (!await WaitForPowerAsync(false, 0, result, true, token))
+                if (!await WaitForPowerAsync(false, 0, result, true, false, token))
                     return Finish(result);
 
                 // Step 1 初始化電表：Relay=00、電阻模式、Auto 檔位（Relay 由下方狀態欄顯示，標題不重複）
@@ -143,7 +143,7 @@ namespace DX01_ShortCircuitTester.Services
                     return Finish(result);
 
                 // V2.4 Step 6 先等待 Power ON（Turn on the battery，V >= PowerOnThreshold）才繼續；逾時 → NG 停止
-                if (!await WaitForPowerAsync(true, 6, result, true, token))
+                if (!await WaitForPowerAsync(true, 6, result, true, false, token))
                     return Finish(result);
 
                 // Step 6 切換電壓量測：DC Voltage、Range 由 Config（無判定值，仍列入結果顯示）
@@ -193,18 +193,38 @@ namespace DX01_ShortCircuitTester.Services
                 AddErrorStep(result, _currentStepNumber, _currentStepName, type, ex.Message);
             }
 
-            // V2.4 PASS 後：等待 Power OFF（請將電池 Power 關機）再返回待機。
-            // 在判定鎖定後執行：此處按「停止」或設備斷線僅返回待機，不影響已判定的 PASS 結果。
-            // FAIL / NG / 中止 / 設備異常 皆不進入（IsPass 為 false）→ 維持目前停止流程，等待人工處理。
+            // V2.5 Step11 最後關機確認：所有量測 PASS 後「不立即顯示 PASS」，先確認電池已關機。
+            //   行為與測試前的關機確認一致：顯示倒數 N 秒（PowerWaitTimeoutSec，同一設定）、持續量測 Power Voltage。
+            //   ① 倒數內偵測到 V <= PowerOffThreshold →「Power OFF detected.」→ PASS。
+            //   ② 倒數結束仍未關機 → failOnTimeout=true 會新增一筆 Power OFF NG 列使 IsPass=false → 判定 NG、停止流程，
+            //      並顯示「Power OFF timeout. / Final power off check failed.」（Timeout 後不可 PASS）。
+            // FAIL / NG / 中止 / 設備異常 皆不進入（IsPass 為 false）→ 維持停止流程，等待人工處理。
             if (result.IsPass)
             {
+                bool offOk = false;
                 try
                 {
-                    // PASS 後等待 Power OFF；failOnTimeout=false → 逾時僅返回待機，不影響已判定的 PASS。
-                    await WaitForPowerAsync(false, 12, result, false, token);
+                    offOk = await WaitForPowerAsync(false, 11, result, true, false, token);
                 }
-                catch (OperationCanceledException) { /* 操作員停止：保留 PASS，僅返回待機 */ }
-                catch { /* 等待期間設備異常：忽略，不影響已判定的 PASS */ }
+                catch (OperationCanceledException) { result.Aborted = true; }   // 操作員停止 → 中止（不 PASS）
+                catch (Exception ex)
+                {
+                    // 等待期間設備異常 → 視為最後關機確認失敗（NG / 設備異常）
+                    LogInfo("Final power off check error: " + ex.Message);
+                    result.HasAnomaly = true;
+                    result.AnomalyType = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
+                    result.AnomalyMessage = ex.Message;
+                    result.AnomalyStep = 11;
+                    result.AnomalyStepName = "Power OFF";
+                }
+
+                // 倒數逾時仍未關機（非停止、非設備異常）→ NG，記錄並標記供 UI 顯示專屬訊息。
+                if (!offOk && !result.Aborted && !result.HasAnomaly)
+                {
+                    result.FinalPowerOffTimeout = true;
+                    LogInfo("Power OFF timeout.");
+                    LogInfo("Final power off check failed.");
+                }
             }
 
             return Finish(result);
@@ -216,11 +236,11 @@ namespace DX01_ShortCircuitTester.Services
         /// waitForOn=true：等待 V &gt;= PowerOnThreshold（請開機）；false：等待 V &lt;= PowerOffThreshold（請關機）。
         /// failOnTimeout=true（前置 / Step6 等待）：逾時時新增一筆 NG 結果列（判定條件 Power ON/OFF Timeout）並回傳 false，
         /// 由呼叫端立即停止流程（NG）。failOnTimeout=false（PASS 後等待）：逾時僅返回待機，不影響已判定的 PASS。
-        /// PowerWaitTimeoutSec &lt;= 0 視為無限等待（只能由停止中斷）。暫停期間逾時計時暫停。
+        /// forceInfinite=true 或 PowerWaitTimeoutSec &lt;= 0 視為無限等待（只能由停止中斷）。暫停期間逾時計時暫停。
         /// 設備 / 通訊異常（READ 失敗）以例外往上拋，由 RunAsync 統一處理。
         /// </summary>
         private async Task<bool> WaitForPowerAsync(bool waitForOn, int stepNumber,
-            TestResult result, bool failOnTimeout, CancellationToken token)
+            TestResult result, bool failOnTimeout, bool forceInfinite, CancellationToken token)
         {
             var ci = System.Globalization.CultureInfo.InvariantCulture;
             double threshold = waitForOn ? Cfg.PowerOnThreshold : Cfg.PowerOffThreshold;
@@ -243,7 +263,8 @@ namespace DX01_ShortCircuitTester.Services
 
             int interval = Cfg.PowerPollIntervalMs > 0 ? Cfg.PowerPollIntervalMs : 500;
             long logIntervalMs = (long)(Cfg.PowerWaitLogIntervalSec > 0 ? Cfg.PowerWaitLogIntervalSec : 30) * 1000;
-            long timeoutMs = (long)(Cfg.PowerWaitTimeoutSec > 0 ? Cfg.PowerWaitTimeoutSec : 0) * 1000;   // 0 = 無限
+            long timeoutMs = forceInfinite ? 0
+                : (long)(Cfg.PowerWaitTimeoutSec > 0 ? Cfg.PowerWaitTimeoutSec : 0) * 1000;   // 0 = 無限（forceInfinite 或設定 <=0）
             var sw = System.Diagnostics.Stopwatch.StartNew();
             double nextLogMs = 0;
             int lastShownSec = -1;
@@ -610,7 +631,7 @@ namespace DX01_ShortCircuitTester.Services
 
         private TestResult Finish(TestResult result)
         {
-            // 測試結束（Step11/12）復位 Relay = 00，回到安全狀態；UI 透過 RelayChanged 同步顯示 00
+            // 測試結束（Step11 關機確認後）復位 Relay = 00，回到安全狀態；UI 透過 RelayChanged 同步顯示 00
             try
             {
                 if (_relay.IsConnected && _relay.CurrentCode != "00")

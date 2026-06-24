@@ -7,7 +7,7 @@
   "vendorIdHex": "0x16C0",
   "productIdHex": "0x05DF",
   "debugLevel": "debug",
-  "barcodeRegex": "^DX01[0-9]{8}$",
+  "barcodeRegex": "^SN:\\s*[0-9]{12}$",
   "step3_caseToChassis_max": 10,
   "step4_pPlusInsulation_min": 1000000,
   "step5_pMinusInsulation_min": 1000000,

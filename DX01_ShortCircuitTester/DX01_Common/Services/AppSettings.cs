@@ -25,7 +25,8 @@ namespace DX01_ShortCircuitTester.Services
         public string DebugLevel = "debug"; // error / info / debug
 
         // 2. 條碼 / 序號規則
-        public string BarcodeRegex = "^DX01[0-9]{8}$";
+        //    格式：SN: + 12 碼數字（允許冒號後空白），例：SN:202606000327 / SN: 202606000327。
+        public string BarcodeRegex = "^SN:\\s*[0-9]{12}$";
 
         // 3. 電阻條件
         public double Step3CaseToChassisMax = 10;          // IRUpper
