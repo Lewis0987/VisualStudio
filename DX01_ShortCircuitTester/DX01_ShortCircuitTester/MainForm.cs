@@ -46,6 +46,8 @@ namespace DX01_ShortCircuitTester
         private Label _lblConnRelayState;
         private Button _btnConnRelay;
         private System.Windows.Forms.Timer _barcodeIdleTimer;   // V2.5：掃描槍未送 Enter → 300ms 閒置即視為掃描完成、自動開測
+        private bool _suppressBarcodeTimer;                      // V2.5：程式自行改寫條碼欄位時抑制 300ms 自動開測（避免 Stop 後驗證舊條碼）
+        private string _barcodeErrorMsg = "Barcode format error. Please scan again.";  // V2.5：條碼欄下方紅字訊息（可動態覆寫）
 
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
@@ -343,7 +345,7 @@ namespace DX01_ShortCircuitTester
         {
             if (_barcodeError)
             {
-                lblBarcodeMsg.Text = "Barcode format invalid.";
+                lblBarcodeMsg.Text = _barcodeErrorMsg;
                 lblBarcodeMsg.ForeColor = Color.Red;
                 lblBarcodeMsg.Visible = true;
             }
@@ -387,10 +389,12 @@ namespace DX01_ShortCircuitTester
             }));
         }
 
-        /// <summary>格式錯誤 → 紅框 + 下方紅字訊息；false → 還原正常樣式並隱藏訊息。</summary>
-        private void SetBarcodeError(bool on)
+        /// <summary>格式錯誤 → 紅框 + 下方紅字訊息（message 可覆寫文字）；false → 還原正常樣式並隱藏訊息。</summary>
+        private void SetBarcodeError(bool on, string message = null)
         {
             _barcodeError = on;
+            if (on && !string.IsNullOrEmpty(message))
+                _barcodeErrorMsg = message;
             if (_barcodeBox != null)
                 _barcodeBox.BackColor = on ? Color.Red : BarcodeBorderNormal;  // 1px 紅框 / 還原白框
             UpdateBarcodeHint();
@@ -1005,13 +1009,15 @@ namespace DX01_ShortCircuitTester
         // 條碼輸入變動：更新提示；並重置 300ms 閒置計時器（掃描槍未送 Enter 時的後援開測）。
         private void TxtBarcode_TextChanged(object sender, EventArgs e)
         {
-            if (_barcodeError) SetBarcodeError(false);
+            if (_barcodeError) SetBarcodeError(false);   // 重新掃描 / 輸入新內容 → 清除紅字
             else UpdateBarcodeHint();
 
+            // _suppressBarcodeTimer：程式自行改寫欄位（KeepBarcodeForRetry / ClearBarcodeForNext）時不啟動自動開測，
+            // 避免 Stop 後還原的舊條碼被 300ms Timer 再次驗證。
             if (_barcodeIdleTimer != null)
             {
                 _barcodeIdleTimer.Stop();   // 每個新字元都重置：只有「停止輸入 300ms」才算掃描完成
-                if (!_running && txtBarcode.Text.Trim().Length > 0)
+                if (!_suppressBarcodeTimer && !_running && txtBarcode.Text.Trim().Length > 0)
                     _barcodeIdleTimer.Start();
             }
         }
@@ -1049,13 +1055,12 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Raw Barcode = " + raw);
             }
 
-            // (6) Settings 未設定 Regex → 不允許開始測試
+            // (6) Settings 未設定 Regex → 不允許開始測試（紅字提示，不跳 Popup）
             if (string.IsNullOrEmpty(pattern))
             {
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode regex failed (rule not configured)");
-                MsgBox.Show(this, "條碼驗證規則未設定",
-                    "Barcode validation rule not configured.", MessageBoxIcon.Warning, "確定");
-                ClearBarcodeForNext();   // 清空 + Focus 回條碼欄
+                SetBarcodeError(true, "Barcode validation rule not configured.");
+                FocusBarcodeInput();     // 保留欄位（清空會清掉紅字）、Focus + SelectAll
                 return;
             }
 
@@ -1063,21 +1068,19 @@ namespace DX01_ShortCircuitTester
             try { match = Regex.IsMatch(raw, pattern); }
             catch (Exception ex)
             {
-                // 規則語法本身錯誤 → 視為未正確設定，不開測
+                // 規則語法本身錯誤 → 視為未正確設定，不開測（紅字提示）
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode regex failed (invalid pattern: " + ex.Message + ")");
-                MsgBox.Show(this, "條碼驗證規則錯誤",
-                    "Barcode validation rule not configured.", MessageBoxIcon.Warning, "確定");
-                ClearBarcodeForNext();
+                SetBarcodeError(true, "Barcode validation rule not configured.");
+                FocusBarcodeInput();
                 return;
             }
 
-            // (3) 驗證失敗 → Error Popup + 清空 + Focus，不開測
+            // (2)(3) 驗證失敗 → 條碼欄下方紅字（不跳 Popup）+ Focus，不開測
             if (!match)
             {
                 if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode regex failed");
-                MsgBox.Show(this, "條碼格式錯誤",
-                    "Barcode format error.\nPlease scan again.", MessageBoxIcon.Warning, "確定");
-                ClearBarcodeForNext();   // 清空 + Focus 回條碼欄
+                SetBarcodeError(true, "Barcode format error. Please scan again.");
+                FocusBarcodeInput();     // 保留欄位內容（清空會清掉紅字）、Focus + SelectAll 讓下一掃覆蓋
                 return;
             }
 
@@ -1184,6 +1187,9 @@ namespace DX01_ShortCircuitTester
             if (!_running) return;
             _userStopped = true;
             if (_debugLog != null) _debugLog.Write(LogKind.Error, "測試已由使用者停止");
+            // V2.5：停止時先停掉條碼閒置計時器，避免稍後還原條碼觸發 Barcode 驗證（不應跳格式錯誤）
+            _barcodeIdleTimer?.Stop();
+            SetBarcodeError(false);   // 清除可能殘留的紅字
             // 取消令會解除暫停等待（WaitWhilePausedAsync 內已註冊 token），流程隨即中止
             try { if (_cts != null) _cts.Cancel(); } catch { }
             SetTestControlsEnabled(false);
@@ -1192,16 +1198,28 @@ namespace DX01_ShortCircuitTester
         /// <summary>PASS：清空條碼、Focus（顯示 placeholder），等待掃下一顆。</summary>
         private void ClearBarcodeForNext()
         {
-            txtBarcode.Clear();   // 觸發 TextChanged → 顯示 placeholder
-            txtBarcode.Focus();
+            _suppressBarcodeTimer = true;
+            try
+            {
+                txtBarcode.Clear();   // 觸發 TextChanged → 清紅字 / 顯示 placeholder（程式改寫 → 不啟動自動開測）
+                txtBarcode.Focus();
+            }
+            finally { _suppressBarcodeTimer = false; }
+            _barcodeIdleTimer?.Stop();
         }
 
         /// <summary>NG / 異常 / 停止 / 未開機：保留原條碼、Focus、全選，方便直接重測或人工確認。</summary>
         private void KeepBarcodeForRetry(string sn)
         {
-            txtBarcode.Text = sn ?? "";
-            txtBarcode.Focus();
-            txtBarcode.SelectAll();
+            _suppressBarcodeTimer = true;   // 程式還原條碼 → 不觸發 300ms 自動開測 / 驗證（避免 Stop 後跳格式錯誤）
+            try
+            {
+                txtBarcode.Text = sn ?? "";
+                txtBarcode.Focus();
+                txtBarcode.SelectAll();
+            }
+            finally { _suppressBarcodeTimer = false; }
+            _barcodeIdleTimer?.Stop();
         }
 
         private async void StartTest(string sn)
