@@ -1,16 +1,17 @@
+variables:
+  DX01_VERSION: "V2.3"
+
 stages:
   - build
 
 build_dx01:
   stage: build
+
   tags:
     - windows
 
   script:
     - cd DX01_ShortCircuitTester
-    - $version = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
-    - $env:DX01_VERSION = "V" + $version.Project.PropertyGroup.Version
-    - echo $env:DX01_VERSION
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln /t:Restore'
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
 
