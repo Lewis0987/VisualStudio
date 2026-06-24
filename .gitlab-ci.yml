@@ -1,17 +1,32 @@
-variables:
-  DX01_VERSION: "V2.4"
-
 stages:
+  - version
   - build
+
+get_version:
+  stage: version
+  tags:
+    - windows
+  script:
+    - cd DX01_ShortCircuitTester
+    - $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
+    - $version = $xml.Project.PropertyGroup.Version
+    - echo "DX01_VERSION=V$version" > version.env
+    - type version.env
+  artifacts:
+    reports:
+      dotenv: DX01_ShortCircuitTester/version.env
 
 build_dx01:
   stage: build
-
   tags:
     - windows
+  needs:
+    - job: get_version
+      artifacts: true
 
   script:
     - cd DX01_ShortCircuitTester
+    - echo $env:DX01_VERSION
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln /t:Restore'
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
 
