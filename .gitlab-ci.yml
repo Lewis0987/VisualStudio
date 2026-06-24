@@ -1,38 +1,30 @@
 stages:
-  - version
+  - prepare
   - build
 
 get_version:
-  stage: version
+  stage: prepare
   tags:
     - windows
   script:
-    - cd DX01_ShortCircuitTester
-    - $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
-    - $version = $xml.Project.PropertyGroup.Version
-    - echo "DX01_VERSION=V$version" > version.env
-    - type version.env
+    - powershell -Command "$xml=[xml](Get-Content 'DX01_ShortCircuitTester.csproj'); $v=$xml.Project.PropertyGroup.Version; 'DX01_VERSION=V' + $v | Out-File version.env -Encoding ascii"
   artifacts:
     reports:
-      dotenv: DX01_ShortCircuitTester/version.env
+      dotenv: version.env
 
-build_dx01:
+build:
   stage: build
   tags:
     - windows
   needs:
     - job: get_version
       artifacts: true
-
   script:
-    - cd DX01_ShortCircuitTester
-    - echo $env:DX01_VERSION
-    - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln /t:Restore'
-    - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
-
+    - echo DX01 Version = %DX01_VERSION%
+    - nuget restore DX01_ShortCircuitTester.sln
+    - msbuild DX01_ShortCircuitTester.sln /p:Configuration=Release
   artifacts:
     name: "DX01_${DX01_VERSION}"
-    when: always
     paths:
-      - DX01_ShortCircuitTester/**/bin/Debug/net48/
+      - bin/Release/
     expire_in: 7 days
