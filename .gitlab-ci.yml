@@ -1,5 +1,5 @@
 variables:
-  DX01_VERSION: "V2.3"
+  DX01_VERSION: "V2.4"
 
 stages:
   - build
