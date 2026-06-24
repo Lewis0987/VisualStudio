@@ -72,7 +72,7 @@ namespace DX01_StressTester
             uiTimer.Start();
             RefreshDeviceStatus();
             SetRunningUi(false);
-            Log("SYS", "DX01 Stress Tester 已啟動");
+            Log("SYS", "DTX01 Stress Tester 已啟動");
         }
 
         private void StressForm_FormClosing(object sender, FormClosingEventArgs e)

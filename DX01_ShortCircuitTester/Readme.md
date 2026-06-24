@@ -136,6 +136,6 @@ DX01Config.json 統一管理
 
 # first upload V1.0
 V1.0<br>
-DX01_專案外殼短路判斷流程<br>
+DTX01_專案外殼短路判斷流程<br>
 G1G2 = Ground / 外殼探棒<br>
 P+P- = Power / 電池正負極<br>

@@ -16,7 +16,7 @@ using DX01_ShortCircuitTester.Services;
 namespace DX01_ShortCircuitTester
 {
     /// <summary>
-    /// DX01 外殼短路流程測試主畫面（真實設備版）。
+    /// DTX01 外殼短路流程測試主畫面（真實設備版）。
     /// UI 與流程不變；設備改用 RealGdm8261AController（RS-232）與 RealRelayController（USB HID）。
     /// </summary>
     public partial class MainForm : Form
@@ -145,7 +145,7 @@ namespace DX01_ShortCircuitTester
             UpdateSummaryStats(null);
 
             // V2.1：版本號（視窗標題 + 狀態列）
-            this.Text = "DX01 外殼短路流程測試 " + Version;
+            this.Text = "DTX01 外殼短路流程測試 " + Version;
             lblVersion.Text = "Version : " + Version;
 
             // V2.1：右下角可收合的 USB Relay 控制小視窗

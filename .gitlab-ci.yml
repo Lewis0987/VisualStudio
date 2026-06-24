@@ -28,7 +28,7 @@ build:
     - nuget restore DX01_ShortCircuitTester.sln
     - msbuild DX01_ShortCircuitTester.sln /p:Configuration=Release
   artifacts:
-    name: "DX01_${DX01_VERSION}"
+    name: "DTX01_${DX01_VERSION}"
     paths:
       - DX01_ShortCircuitTester/bin/Release/
     expire_in: 7 days

@@ -732,7 +732,7 @@ namespace DX01_ShortCircuitTester
             this.MinimumSize = new System.Drawing.Size(840, 620);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "DX01 外殼短路流程測試 V2.1";
+            this.Text = "DTX01 外殼短路流程測試 V2.1";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.tabMain.ResumeLayout(false);
             this.tabTest.ResumeLayout(false);

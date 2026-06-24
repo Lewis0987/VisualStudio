@@ -557,7 +557,7 @@ namespace DX01_StressTester
             this.MinimumSize = new System.Drawing.Size(700, 560);
             this.Name = "StressForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "DX01 Stress Tester";
+            this.Text = "DTX01 Stress Tester";
             this.Load += new System.EventHandler(this.StressForm_Load);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.StressForm_FormClosing);
             this.tabMain.ResumeLayout(false);
