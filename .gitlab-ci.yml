@@ -12,7 +12,7 @@ build_dx01:
   script:
     - cd DX01_ShortCircuitTester
     - dotnet nuget locals all --clear
-    - dotnet restore DX01_ShortCircuitTester.sln --force
+    - dotnet restore DX01_ShortCircuitTester.sln --force --source https://api.nuget.org/v3/index.json
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
 
   artifacts:
