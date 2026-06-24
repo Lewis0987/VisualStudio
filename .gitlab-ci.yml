@@ -11,7 +11,7 @@ build_dx01:
 
   script:
     - cd DX01_ShortCircuitTester
-    - dotnet restore DX01_ShortCircuitTester.sln
+    - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln /t:Restore'
     - '& "C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe" DX01_ShortCircuitTester.sln'
 
   artifacts:
