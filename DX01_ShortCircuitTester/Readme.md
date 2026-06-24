@@ -1,3 +1,10 @@
+# V2.4
+1. 新增 GitLab CI/CD 自動包版功能
+ - Push 至 GitLab 後自動執行 Build
+ - 自動產生 Artifact
+ - 支援 GitLab 網頁下載建置版本
+ - Artifact 檔名顯示版本資訊
+
 # V2.3 
 1. 新增 Power ON/OFF 自動偵測功能
 2. 新增 Power 門檻設定（ON/OFF Threshold） "EnablePowerCheckBypass": false 就能恢復正式檢測邏輯，不用再改程式碼。

@@ -59,7 +59,7 @@ namespace DX01_ShortCircuitTester
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
 
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
-        public const string Version = "V2.3";
+        public const string Version = "V2.4";
 
         // Test 頁底部連線狀態用色：已連線=綠、未連線=紅、連線中=橘
         private enum ConnState { Disconnected, Connecting, Connected }
@@ -382,7 +382,7 @@ namespace DX01_ShortCircuitTester
             _flow.StepCompleted += Flow_StepCompleted;
             _flow.StatusChanged += Flow_StatusChanged;
             _flow.InstructionChanged += Flow_InstructionChanged;
-            // V2.3：Power ON/OFF 改為完全自動偵測（門檻控制），不再有提示 Popup / 忽略跳過機制。
+            // V2.4：Power ON/OFF 改為完全自動偵測（門檻控制），不再有提示 Popup / 忽略跳過機制。
         }
 
         /// <summary>啟動時嘗試連線（Relay 由 HID 自動偵測，電表用目前選擇的 COM）。</summary>
@@ -972,7 +972,7 @@ namespace DX01_ShortCircuitTester
             if (_running)
                 return;
 
-            // V2.3：TEST 頁不需登入 → 掃描條碼 / 開始測試不再跳權限驗證。
+            // V2.4：TEST 頁不需登入 → 掃描條碼 / 開始測試不再跳權限驗證。
             // 登入僅在切換到 Settings / Debug Log 等管理功能時觸發（TabMain_Selecting）。
 
             // 設備未連線屬「測試前檢查失敗」→ 統一顯示 NG（目前步驟→待測 / 大字→NG）
@@ -1014,7 +1014,7 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Start Test");
             }
 
-            // V2.3：移除舊「Step 0 Power DC 48V 檢查」與忽略/確定彈窗；
+            // V2.4：移除舊「Step 0 Power DC 48V 檢查」與忽略/確定彈窗；
             // 改由 DX01TestFlow 內自動偵測：測試前等待 Power OFF → Step6 等待 Power ON → PASS 後等待 Power OFF。
             // 重置畫面（Return to Step1），固定新增「序號」列（工號不顯示於表格，僅記於 Debug Log / 底部）
             dgvResults.Rows.Clear();
@@ -1084,7 +1084,7 @@ namespace DX01_ShortCircuitTester
             // V2.1：測試結束 → 停用暫停 / 停止
             SetTestControlsEnabled(false);
 
-            // V2.3 FinalResult（任一 Step NG 或異常即停止）：
+            // V2.4 FinalResult（任一 Step NG 或異常即停止）：
             // 停止＝使用者停止 / 中止；PASS＝全部合格；其餘（量測不合格或設備異常）＝統一顯示 NG。
             if (result.Aborted)
                 SetResult("停止", Color.White, Color.DarkOrange);
@@ -1102,7 +1102,7 @@ namespace DX01_ShortCircuitTester
                 _debugLog.Write(LogKind.Info, "Result : " + verdict);
             }
 
-            // V2.3：僅「PASS」寫入 CSV（FAIL / NG / 停止 / 設備異常皆不寫，CSV 只保留正式通過產品紀錄）。
+            // V2.4：僅「PASS」寫入 CSV（FAIL / NG / 停止 / 設備異常皆不寫，CSV 只保留正式通過產品紀錄）。
             string logFile = "";
             if (result.IsPass)
             {
@@ -1127,7 +1127,7 @@ namespace DX01_ShortCircuitTester
             if (result.HasAnomaly)
                 HandleDeviceAnomaly(result);
 
-            // V2.3：測試結束「目前步驟」不停留在失敗的 Step 名稱 / Waiting 文字。
+            // V2.4：測試結束「目前步驟」不停留在失敗的 Step 名稱 / Waiting 文字。
             // 失敗（量測 NG / 設備異常 / Power 逾時）→ 顯示 NG；PASS / 停止 → 待測。
             ResetLiveStatus();
             if (!result.IsPass && !result.Aborted)
@@ -1212,7 +1212,7 @@ namespace DX01_ShortCircuitTester
         }
 
         /// <summary>
-        /// V2.3：設定「目前步驟」文字與配色。
+        /// V2.4：設定「目前步驟」文字與配色。
         /// powerInstruction=true（等待 Power 開機 / 關機）→ 紅字，明顯提醒作業員操作；其餘 → 黑字。
         /// 多行文字（如「Waiting for Power ON...\nTimeout: Ns」）：關閉省略號並自動縮小字級，
         /// 確保兩行於固定高度欄位內完整顯示、不裁切、不重疊（單行狀態維持原字級）。
@@ -1325,7 +1325,7 @@ namespace DX01_ShortCircuitTester
                     : Color.FromArgb(183, 28, 28);
             }
 
-            // V2.3：NG 時間窗重試的逐筆明細不再逐行寫入 Debug Log（避免大量洗版）。
+            // V2.4：NG 時間窗重試的逐筆明細不再逐行寫入 Debug Log（避免大量洗版）。
             // 重試期間以單行狀態（原地更新）呈現，重試結果由流程寫入一筆摘要（PASS / 逾時 NG）。
 
             dgvResults.FirstDisplayedScrollingRowIndex = index;
@@ -1337,7 +1337,7 @@ namespace DX01_ShortCircuitTester
         }
 
         /// <summary>
-        /// V2.3：等待 Power ON/OFF 時的作業員指示（請將電池 Power 開機 / 關機），
+        /// V2.4：等待 Power ON/OFF 時的作業員指示（請將電池 Power 開機 / 關機），
         /// 顯示於「目前步驟」大字；即時電壓由 Flow_Measured 更新、狀態由 Flow_StatusChanged 更新。
         /// </summary>
         private void Flow_InstructionChanged(object sender, string message)
@@ -1389,7 +1389,7 @@ namespace DX01_ShortCircuitTester
                 btnOpenLogDir.Enabled = admin && !testing;
             }
 
-            // V2.3：登出按鈕：登入後（OP / Admin 皆）顯示於 TEST 頁 [登出][暫停][停止]；未登入隱藏；測試中停用。
+            // V2.4：登出按鈕：登入後（OP / Admin 皆）顯示於 TEST 頁 [登出][暫停][停止]；未登入隱藏；測試中停用。
             if (btnLogout != null)
             {
                 btnLogout.Visible = loggedIn;
@@ -1403,7 +1403,7 @@ namespace DX01_ShortCircuitTester
                 btnAccountMgr.Enabled = admin && !testing;
             }
 
-            // V2.3 角色 UI 顯示：
+            // V2.4 角色 UI 顯示：
             //   Settings 內僅「GDM 連線區 / Relay 連線區」OP 可用；其餘工程 / 管理功能僅 Admin 可見：
             //   設備測試 / 電表測試、設備資訊（GDM Identify / Relay VID/PID）、參數設定、帳號管理。
             if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
@@ -1413,7 +1413,7 @@ namespace DX01_ShortCircuitTester
             SetTabVisible(tabDevice, true);   // 設備設定（Settings）：含 GDM / Relay 連線區，OP 亦可重連
             SetTabVisible(tabLog, admin);     // Debug Log：僅 Admin
 
-            // V2.3：底部帳戶狀態（Version 右側 / 連線狀態左側）：未登入空白；Admin : 工號 / OP : 工號。
+            // V2.4：底部帳戶狀態（Version 右側 / 連線狀態左側）：未登入空白；Admin : 工號 / OP : 工號。
             if (lblOperator != null)
             {
                 lblOperator.Visible = true;

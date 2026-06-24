@@ -446,7 +446,7 @@ namespace DX01_ShortCircuitTester
             this.lblVersion.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
             this.lblVersion.Size = new System.Drawing.Size(110, 20);
             this.lblVersion.TabIndex = 3;
-            this.lblVersion.Text = "Version : V2.3";
+            this.lblVersion.Text = "Version : V2.4";
             this.lblVersion.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // lblOperator

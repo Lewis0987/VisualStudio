@@ -8,10 +8,10 @@
 		<RootNamespace>DX01_StressTester</RootNamespace>
 		<AssemblyName>DX01_StressTester</AssemblyName>
 		<LangVersion>7.3</LangVersion>
-		<!-- V2.3 版本資訊（與主程式同步） -->
-		<Version>2.3.0</Version>
-		<AssemblyVersion>2.3.0.0</AssemblyVersion>
-		<FileVersion>2.3.0.0</FileVersion>
+		<!-- V2.4 版本資訊（與主程式同步） -->
+		<Version>2.4.0</Version>
+		<AssemblyVersion>2.4.0.0</AssemblyVersion>
+		<FileVersion>2.4.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- 共用通訊 / 設定 / 判定 / Log 邏輯一律來自 DX01_Common（不複製第二份） -->

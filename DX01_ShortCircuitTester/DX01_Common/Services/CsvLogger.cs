@@ -6,7 +6,7 @@ using DX01_ShortCircuitTester.Models;
 namespace DX01_ShortCircuitTester.Services
 {
     /// <summary>
-    /// 測試結果 CSV 紀錄器（V2.3 寬表格式）。
+    /// 測試結果 CSV 紀錄器（V2.4 寬表格式）。
     /// 每天一個檔案（Logs\DX01_yyyyMMdd.csv），每次測試完成（PASS / FAIL 皆）新增「一列」。
     /// 欄位固定為：TIME,Label,G1G2R,G1P+R,G1P-R,P+P-V,G1P+V,G2P-V。
     /// 量測值採目前程式顯示格式（含單位 / OL）；該次未量測之欄位留空（不填 0，避免誤判）。

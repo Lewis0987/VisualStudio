@@ -40,7 +40,7 @@ namespace DX01_ShortCircuitTester.Services
         public double Step10PMinusToCaseMax = 1;    // VoltIsoUpper
         public double DcVoltageRange = 100;         // GDM DC 電壓檔位 (CONF:VOLT:DC <range>)
 
-        // 4b. V2.3 Power ON/OFF 自動偵測門檻（DC 電壓 / Relay 11；實際電池輸出電壓判定）
+        // 4b. V2.4 Power ON/OFF 自動偵測門檻（DC 電壓 / Relay 11；實際電池輸出電壓判定）
         public double PowerOnThreshold = 40;        // 等待 Power ON：V >= 此值（請開機）
         public double PowerOffThreshold = 5;        // 等待 Power OFF：V <= 此值（請關機）
         public int PowerPollIntervalMs = 500;       // 等待 Power ON/OFF 期間每次量測間隔 (ms)
@@ -61,7 +61,7 @@ namespace DX01_ShortCircuitTester.Services
         public int ReadTimeoutMs = 5000;
         public int RelaySwitchDelayMs = 300;
 
-        // 7b. V2.3 NG 重試（時間窗）：量測 NG 後於 NgRetryTimeoutMs 內每 NgRetryIntervalMs 重新量測，
+        // 7b. V2.4 NG 重試（時間窗）：量測 NG 後於 NgRetryTimeoutMs 內每 NgRetryIntervalMs 重新量測，
         // 期間恢復正常即判 PASS；逾時仍不符才判 NG。（不適用 Power ON/OFF 等待）
         public int NgRetryTimeoutMs = 3000;
         public int NgRetryIntervalMs = 300;

@@ -22,7 +22,7 @@ namespace DX01_ShortCircuitTester
         private TextBox txtIRUpper, txtOLValue;
         // 4. 電壓
         private TextBox txtVoltUpper, txtVoltLower, txtVoltOn, txtVoltIsoUpper, txtDcVoltageRange;
-        // 4b. V2.3 Power ON/OFF 自動偵測門檻
+        // 4b. V2.4 Power ON/OFF 自動偵測門檻
         private TextBox txtPowerOnThreshold, txtPowerOffThreshold, txtPowerPollIntervalMs, txtPowerWaitLogIntervalSec, txtPowerWaitTimeoutSec;
         // 5. 電流
         private TextBox txtCurrentMin, txtCurrentMax;
@@ -30,7 +30,7 @@ namespace DX01_ShortCircuitTester
         private readonly TextBox[] _stepBoxes = new TextBox[11];
         // 7. UI / 執行
         private TextBox txtPopupSeconds, txtStepFontSize, txtPollIntervalMs, txtReadTimeoutMs, txtRelaySwitchDelayMs;
-        // 7b. V2.3 NG 重試（時間窗）
+        // 7b. V2.4 NG 重試（時間窗）
         private TextBox txtNgRetryTimeoutMs, txtNgRetryIntervalMs;
 
         private Button btnSave, btnCancel;
@@ -100,7 +100,7 @@ namespace DX01_ShortCircuitTester
             txtVoltIsoUpper = TxtRow("VoltIsoUpper(V)  → step9/10");
             txtDcVoltageRange = TxtRow("DC Voltage Range(V)");
 
-            Header("4b. Power 自動偵測門檻 (V2.3)");
+            Header("4b. Power 自動偵測門檻 (V2.4)");
             txtPowerOnThreshold = TxtRow("Power ON 門檻 (V)");
             txtPowerOffThreshold = TxtRow("Power OFF 門檻 (V)");
             txtPowerPollIntervalMs = TxtRow("Power 偵測間隔 (ms)");
@@ -122,7 +122,7 @@ namespace DX01_ShortCircuitTester
             txtReadTimeoutMs = TxtRow("ReadTimeoutMs");
             txtRelaySwitchDelayMs = TxtRow("RelaySwitchDelayMs");
 
-            Header("7b. NG 重試時間窗 (V2.3)");
+            Header("7b. NG 重試時間窗 (V2.4)");
             txtNgRetryTimeoutMs = TxtRow("NG Retry Timeout (ms)");
             txtNgRetryIntervalMs = TxtRow("NG Retry Interval (ms)");
         }

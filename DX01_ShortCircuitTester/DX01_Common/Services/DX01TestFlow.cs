@@ -53,7 +53,7 @@ namespace DX01_ShortCircuitTester.Services
         public event EventHandler<TestStepResult> StepCompleted;
         public event EventHandler<string> StatusChanged;
 
-        /// <summary>V2.3：需作業員動作的指示訊息（請將電池 Power 開機 / 關機），顯示於「目前步驟」大字。</summary>
+        /// <summary>V2.4：需作業員動作的指示訊息（請將電池 Power 開機 / 關機），顯示於「目前步驟」大字。</summary>
         public event EventHandler<string> InstructionChanged;
 
         /// <summary>除錯日誌（可為 null）；用於記錄各 Step 的等待時間。</summary>
@@ -106,7 +106,7 @@ namespace DX01_ShortCircuitTester.Services
 
             try
             {
-                // V2.3 測試前：等待 Power OFF（Turn off the battery，V <= PowerOffThreshold）才開始；逾時 → NG 停止
+                // V2.4 測試前：等待 Power OFF（Turn off the battery，V <= PowerOffThreshold）才開始；逾時 → NG 停止
                 if (!await WaitForPowerAsync(false, 0, result, true, token))
                     return Finish(result);
 
@@ -124,7 +124,7 @@ namespace DX01_ShortCircuitTester.Services
                 await WaitStep(2, token);
                 AddInfoStep(result, 2, "掃描 Label / 記錄序號", "-", "-", "-", "OK");
 
-                // V2.3：任一量測 Step 判定 NG → 立即停止流程，不執行後續 Step（最終結果 FAIL）。
+                // V2.4：任一量測 Step 判定 NG → 立即停止流程，不執行後續 Step（最終結果 FAIL）。
                 // 設備 / 通訊異常（例外）亦於下方 catch 立即停止並標記異常（FAIL）。
 
                 // Step 3 外殼對機殼導通：Relay=00，R < 10Ω
@@ -142,7 +142,7 @@ namespace DX01_ShortCircuitTester.Services
                         MeasurementMode.Resistance, "Ω", Cfg.Step5PMinusInsulationMin, null, token))
                     return Finish(result);
 
-                // V2.3 Step 6 先等待 Power ON（Turn on the battery，V >= PowerOnThreshold）才繼續；逾時 → NG 停止
+                // V2.4 Step 6 先等待 Power ON（Turn on the battery，V >= PowerOnThreshold）才繼續；逾時 → NG 停止
                 if (!await WaitForPowerAsync(true, 6, result, true, token))
                     return Finish(result);
 
@@ -193,7 +193,7 @@ namespace DX01_ShortCircuitTester.Services
                 AddErrorStep(result, _currentStepNumber, _currentStepName, type, ex.Message);
             }
 
-            // V2.3 PASS 後：等待 Power OFF（請將電池 Power 關機）再返回待機。
+            // V2.4 PASS 後：等待 Power OFF（請將電池 Power 關機）再返回待機。
             // 在判定鎖定後執行：此處按「停止」或設備斷線僅返回待機，不影響已判定的 PASS 結果。
             // FAIL / NG / 中止 / 設備異常 皆不進入（IsPass 為 false）→ 維持目前停止流程，等待人工處理。
             if (result.IsPass)
@@ -211,7 +211,7 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// V2.3：等待作業員開 / 關電池 Power。以 DC 電壓模式（Cfg.DcVoltageRange）、Relay=11 持續量測，
+        /// V2.4：等待作業員開 / 關電池 Power。以 DC 電壓模式（Cfg.DcVoltageRange）、Relay=11 持續量測，
         /// 直到達到門檻（回傳 true）或逾時 PowerWaitTimeoutSec（回傳 false）。
         /// waitForOn=true：等待 V &gt;= PowerOnThreshold（請開機）；false：等待 V &lt;= PowerOffThreshold（請關機）。
         /// failOnTimeout=true（前置 / Step6 等待）：逾時時新增一筆 NG 結果列（判定條件 Power ON/OFF Timeout）並回傳 false，
@@ -230,7 +230,7 @@ namespace DX01_ShortCircuitTester.Services
             _currentStepNumber = stepNumber;
             _currentStepName = waitLabel;
 
-            // V2.3：「目前步驟」紅字直接顯示等待狀態 + Timeout 倒數（不再顯示 "Turn on/off the battery." 以免重複提示）；
+            // V2.4：「目前步驟」紅字直接顯示等待狀態 + Timeout 倒數（不再顯示 "Turn on/off the battery." 以免重複提示）；
             // 底部狀態列只保留一般狀態（測試中）。
             RaiseInstruction(waitLabel + "...");
             RaiseStatus("測試中…");
@@ -369,7 +369,7 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// 執行一個量測步驟並判定（V2.3：NG 改用「時間窗」重試，取代固定 3 次）。
+        /// 執行一個量測步驟並判定（V2.4：NG 改用「時間窗」重試，取代固定 3 次）。
         /// 順序：① 切換 GDM 模式 ② 切換 Relay ③ 等待 RelaySwitchDelayMs ④ StepNWaitMs ⑤ READ?（loud）⑥ 判定。
         /// 若 NG：於 Cfg.NgRetryTimeoutMs 內每 Cfg.NgRetryIntervalMs 以「靜默讀取」重新量測，
         ///   期間恢復正常即判 PASS；逾時仍不符才判 NG。重試期間以單行狀態（原地更新）顯示，避免 Debug Log 洗版。

@@ -10,7 +10,7 @@ namespace DX01_ShortCircuitTester.Services
         Tx,
         Rx,
         Error,
-        /// <summary>V2.3：等待 Power ON/OFF 的單筆狀態行（畫面原地更新、不寫檔），避免輪詢洗版。</summary>
+        /// <summary>V2.4：等待 Power ON/OFF 的單筆狀態行（畫面原地更新、不寫檔），避免輪詢洗版。</summary>
         Status
     }
 
