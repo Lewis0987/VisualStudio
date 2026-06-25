@@ -4,6 +4,8 @@
  - 自動產生 Artifact
  - 支援 GitLab 網頁下載建置版本
  - Artifact 檔名顯示版本資訊
+2. 新增Setting條碼規則管理
+3. 條碼欄位、Barcode邏輯優化
 
 # V2.3 
 1. 新增 Power ON/OFF 自動偵測功能
