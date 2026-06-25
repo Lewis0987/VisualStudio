@@ -39,15 +39,15 @@ namespace DX01_ShortCircuitTester
         // V2.2：員工登入 / 權限；btnLogout 於 BuildBarcodeArea 建立（登入改為自動觸發，無登入按鈕）
         private OperatorAuth _auth;
         private Button btnLogout;
-        private Button btnLogin;                 // V2.5：Test 頁登入鈕（Settings 改 Admin 限定後的登入入口）
-        // V2.5：Test 頁「大字幕左側」連線控制（GDM / Relay 狀態燈 + 連線/斷線 toggle）
+        private Button btnLogin;                 // V2.4：Test 頁登入鈕（Settings 改 Admin 限定後的登入入口）
+        // V2.4：Test 頁「大字幕左側」連線控制（GDM / Relay 狀態燈 + 連線/斷線 toggle）
         private Label _lblConnGdmState;
         private Button _btnConnGdm;
         private Label _lblConnRelayState;
         private Button _btnConnRelay;
-        private System.Windows.Forms.Timer _barcodeIdleTimer;   // V2.5：掃描槍未送 Enter → 300ms 閒置即視為掃描完成、自動開測
-        private bool _suppressBarcodeTimer;                      // V2.5：程式自行改寫條碼欄位時抑制 300ms 自動開測（避免 Stop 後驗證舊條碼）
-        private string _barcodeErrorMsg = "Barcode format error. Please scan again.";  // V2.5：條碼欄下方紅字訊息（可動態覆寫）
+        private System.Windows.Forms.Timer _barcodeIdleTimer;   // V2.4：掃描槍未送 Enter → 300ms 閒置即視為掃描完成、自動開測
+        private bool _suppressBarcodeTimer;                      // V2.4：程式自行改寫條碼欄位時抑制 300ms 自動開測（避免 Stop 後驗證舊條碼）
+        private string _barcodeErrorMsg = "Barcode format error. Please scan again.";  // V2.4：條碼欄下方紅字訊息（可動態覆寫）
         // V2.4：掃描槍 vs 手動輸入判斷 — 整串輸入 < BarcodeScannerMaxMs 且 >= BarcodeScannerMinKeys 鍵 → 視為掃描槍，Timer 才自動驗證。
         private int _barcodeFirstKeyTick;     // 本串第一個字元的 KeyDown 時間 (Environment.TickCount)
         private int _barcodeLastKeyTick;      // 本串最後一個字元的 KeyDown 時間
@@ -137,11 +137,11 @@ namespace DX01_ShortCircuitTester
             txtBarcode.KeyDown += TxtBarcode_KeyDown;
             txtBarcode.Enter += (s, ev) => txtBarcode.SelectAll();
             txtBarcode.TextChanged += TxtBarcode_TextChanged;
-            // V2.5：掃描槍未送 Enter 的後援 — 300ms 內無新字元即視為掃描完成，符合格式則自動開測（保留 Enter 機制）。
+            // V2.4：掃描槍未送 Enter 的後援 — 300ms 內無新字元即視為掃描完成，符合格式則自動開測（保留 Enter 機制）。
             _barcodeIdleTimer = new System.Windows.Forms.Timer { Interval = 300 };
             _barcodeIdleTimer.Tick += BarcodeIdleTimer_Tick;
 
-            // V2.5：在大字幕左側建立 GDM / Relay 連線控制（並隱藏 Settings 內的連線鈕）
+            // V2.4：在大字幕左側建立 GDM / Relay 連線控制（並隱藏 Settings 內的連線鈕）
             BuildConnArea();
 
             // 自動聚焦：啟動完成、切回 Test 頁
@@ -380,7 +380,7 @@ namespace DX01_ShortCircuitTester
         }
 
         /// <summary>
-        /// V2.5：將焦點移回「條碼/序號」欄。以 BeginInvoke 延遲到目前事件（按鈕點擊 / Popup 關閉）處理完成後執行，
+        /// V2.4：將焦點移回「條碼/序號」欄。以 BeginInvoke 延遲到目前事件（按鈕點擊 / Popup 關閉）處理完成後執行，
         /// 確保按完 連線 / 中斷 或錯誤 Popup 關閉後，游標確實回到輸入框，OP 可直接下一次掃描。
         /// </summary>
         private void FocusBarcodeInput(bool selectAll = true)
@@ -733,7 +733,7 @@ namespace DX01_ShortCircuitTester
         }
 
         /// <summary>
-        /// V2.5：在「大字幕」左側建立 GDM / Relay 連線控制直式區塊（OP 可於 Test 頁直接連線，免進 Settings）。
+        /// V2.4：在「大字幕」左側建立 GDM / Relay 連線控制直式區塊（OP 可於 Test 頁直接連線，免進 Settings）。
         /// 原 panelStatus 兩欄（狀態左 / 大字幕）調整為三欄：[連線區][狀態左][大字幕]。
         /// </summary>
         private void BuildConnArea()
@@ -768,7 +768,7 @@ namespace DX01_ShortCircuitTester
             panelStatus.Controls.Add(panelConn, 0, 0);
             panelStatus.ResumeLayout();
 
-            // V2.5：Settings(設備設定) 內的「連線 / 中斷」按鈕保留（與 Test 頁連線鈕並存）。
+            // V2.4：Settings(設備設定) 內的「連線 / 中斷」按鈕保留（與 Test 頁連線鈕並存）。
             // 兩邊共用同一 _meter / _relay 狀態，皆由 UpdateConnStatus 同步啟用 / 停用與狀態顯示。
         }
 
@@ -899,7 +899,7 @@ namespace DX01_ShortCircuitTester
                 btnRelayDisconnect.Enabled = false;
             }
 
-            // V2.5：Test 頁「大字幕左側」連線區（中文狀態燈 + 連線鈕；已連線→停用，符合「未連線才可按連線」）
+            // V2.4：Test 頁「大字幕左側」連線區（中文狀態燈 + 連線鈕；已連線→停用，符合「未連線才可按連線」）
             if (_lblConnGdmState != null)
             {
                 _lblConnGdmState.Text = g ? "● 已連線" : "● 未連線";
@@ -1207,7 +1207,7 @@ namespace DX01_ShortCircuitTester
             if (!_running) return;
             _userStopped = true;
             if (_debugLog != null) _debugLog.Write(LogKind.Error, "測試已由使用者停止");
-            // V2.5：停止時先停掉條碼閒置計時器，避免稍後還原條碼觸發 Barcode 驗證（不應跳格式錯誤）
+            // V2.4：停止時先停掉條碼閒置計時器，避免稍後還原條碼觸發 Barcode 驗證（不應跳格式錯誤）
             _barcodeIdleTimer?.Stop();
             SetBarcodeError(false);   // 清除可能殘留的紅字
             // 取消令會解除暫停等待（WaitWhilePausedAsync 內已註冊 token），流程隨即中止
@@ -1256,7 +1256,7 @@ namespace DX01_ShortCircuitTester
             // 登入僅在切換到 Settings / Debug Log 等管理功能時觸發（TabMain_Selecting）。
 
             // 設備未連線屬「測試前檢查失敗」→ 統一顯示 NG（目前步驟→待測 / 大字→NG）；
-            // V2.5：連線已移至 Test 頁 → 不再切換到（OP 看不到的）Settings 分頁，提示後留在 Test 頁直接連線。
+            // V2.4：連線已移至 Test 頁 → 不再切換到（OP 看不到的）Settings 分頁，提示後留在 Test 頁直接連線。
             if (!_meter.IsConnected)
             {
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "StartTest blocked reason = 電表未連線");
@@ -1327,7 +1327,7 @@ namespace DX01_ShortCircuitTester
                 SetRunningState(false);
                 UpdateConnStatus(); // 設備可能因例外失聯，更新狀態
                 ShowFailStatus();   // 內含 ResetLiveStatus（目前步驟→待測）
-                ClearBarcodeForNext();   // V2.5：例外＝顯示 NG → 比照 NG 清空條碼、回到輸入欄等待下一顆
+                ClearBarcodeForNext();   // V2.4：例外＝顯示 NG → 比照 NG 清空條碼、回到輸入欄等待下一顆
                 return;
             }
             finally
@@ -1416,14 +1416,14 @@ namespace DX01_ShortCircuitTester
             ResetLiveStatus();
             if (result.FinalPowerOffTimeout)
             {
-                // V2.5：最後關機確認逾時 → 目前步驟以紅字兩行顯示專屬訊息（大字仍為 NG）
+                // V2.4：最後關機確認逾時 → 目前步驟以紅字兩行顯示專屬訊息（大字仍為 NG）
                 SetCurrentStep("Power OFF timeout.\nFinal power off check failed.", true);
                 lblInfo.Text = "Final power off check failed.";
             }
             else if (!result.IsPass && !result.Aborted)
                 SetCurrentStep("NG");
 
-            // V2.5 條碼行為：PASS / NG（含設備異常）→ 清空並回到條碼欄位，方便直接掃下一顆；
+            // V2.4 條碼行為：PASS / NG（含設備異常）→ 清空並回到條碼欄位，方便直接掃下一顆；
             //                 僅「停止(Stop)」保留原條碼 + 全選，方便人工確認。（Pause 不會進到此處）
             if (result.Aborted)
                 KeepBarcodeForRetry(result.SerialNumber);
@@ -1680,7 +1680,7 @@ namespace DX01_ShortCircuitTester
             }
 
             // V2.4：登出按鈕：登入後（OP / Admin 皆）顯示於 TEST 頁 [登出][暫停][停止]；未登入隱藏；測試中停用。
-            // V2.5：登入鈕（未登入顯示）/ 登出鈕（已登入顯示）；測試中皆停用。
+            // V2.4：登入鈕（未登入顯示）/ 登出鈕（已登入顯示）；測試中皆停用。
             if (btnLogin != null)
             {
                 btnLogin.Visible = !loggedIn;
@@ -1705,7 +1705,7 @@ namespace DX01_ShortCircuitTester
             if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
             if (gbDevInfo != null) gbDevInfo.Visible = admin;       // GDM Identify / Relay VID/PID
             if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定
-            //   V2.5 分頁：連線已移至 Test 頁 → Settings（設備設定）與 Debug Log 皆僅 Admin 可見；OP 不進 Settings。
+            //   V2.4 分頁：連線已移至 Test 頁 → Settings（設備設定）與 Debug Log 皆僅 Admin 可見；OP 不進 Settings。
             SetTabVisible(tabDevice, admin);  // 設備設定（Settings）：僅 Admin（IP/Port/LAN-Serial/Relay 資訊）
             SetTabVisible(tabLog, admin);     // Debug Log：僅 Admin
 

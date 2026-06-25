@@ -193,7 +193,7 @@ namespace DX01_ShortCircuitTester.Services
                 AddErrorStep(result, _currentStepNumber, _currentStepName, type, ex.Message);
             }
 
-            // V2.5 Step11 最後關機確認：所有量測 PASS 後「不立即顯示 PASS」，先確認電池已關機。
+            // V2.4 Step11 最後關機確認：所有量測 PASS 後「不立即顯示 PASS」，先確認電池已關機。
             //   行為與測試前的關機確認一致：顯示倒數 N 秒（PowerWaitTimeoutSec，同一設定）、持續量測 Power Voltage。
             //   ① 倒數內偵測到 V <= PowerOffThreshold →「Power OFF detected.」→ PASS。
             //   ② 倒數結束仍未關機 → failOnTimeout=true 會新增一筆 Power OFF NG 列使 IsPass=false → 判定 NG、停止流程，
