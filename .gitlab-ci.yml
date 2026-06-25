@@ -7,14 +7,12 @@ get_version:
   tags:
     - windows
   script:
-    - |
-      $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
-      $version = $xml.Project.PropertyGroup.Version
-      "DX01_VERSION=V$version" | Out-File version.env -Encoding ascii
-      Get-Content version.env
-  artifacts:
-    reports:
-      dotenv: version.env
+    - echo "===== CURRENT PATH ====="
+    - pwd
+    - echo "===== ROOT FILES ====="
+    - dir
+    - echo "===== FIND CSPROJ ====="
+    - dir /s *.csproj
 
 build:
   stage: build
