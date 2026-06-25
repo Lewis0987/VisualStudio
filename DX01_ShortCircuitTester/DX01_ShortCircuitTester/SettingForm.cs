@@ -16,8 +16,9 @@ namespace DX01_ShortCircuitTester
         // 1. 設備連線
         private TextBox txtLanIp, txtLanPort, txtVendorIdHex, txtProductIdHex;
         private ComboBox cbDebugLevel;
-        // 2. 條碼
-        private TextBox txtBarcodeRegex;
+        // 2. 條碼規則管理（V2.4：多組規則，可新增 / 編輯 / 刪除 / 啟用停用）
+        private CheckedListBox _clbRules;
+        private System.Collections.Generic.List<BarcodeRule> _rules;
         // 3. 電阻
         private TextBox txtIRUpper, txtOLValue;
         // 4. 電壓
@@ -86,8 +87,7 @@ namespace DX01_ShortCircuitTester
             txtProductIdHex = TxtRow("ProductIdHex");
             cbDebugLevel = ComboRow("DebugLevel", new[] { "error", "info", "debug" });
 
-            Header("2. 條碼 / 序號規則");
-            txtBarcodeRegex = TxtRow("BarcodeRegex");
+            BuildBarcodeRulesSection();
 
             Header("3. 電阻條件");
             txtIRUpper = TxtRow("IRUpper(Ω)  → step3");
@@ -151,6 +151,97 @@ namespace DX01_ShortCircuitTester
             return t;
         }
 
+        // ===================== 條碼規則管理 (V2.4) =====================
+
+        private void BuildBarcodeRulesSection()
+        {
+            Header("2. 條碼規則管理 (V2.4)");
+
+            _clbRules = new CheckedListBox
+            {
+                Location = new Point(20, _y),
+                Width = 410,
+                Height = 120,
+                CheckOnClick = true,
+                IntegralHeight = false,
+                Font = new Font("Consolas", 9F)
+            };
+            // 勾選 / 取消勾選 → 同步該規則的 Enabled
+            _clbRules.ItemCheck += (s, e) =>
+            {
+                if (_rules != null && e.Index >= 0 && e.Index < _rules.Count)
+                    _rules[e.Index].Enabled = (e.NewValue == CheckState.Checked);
+            };
+            _clbRules.DoubleClick += (s, e) => EditRule();
+            _body.Controls.Add(_clbRules);
+            _y += 126;
+
+            var btnAdd = new Button { Text = "新增", Location = new Point(20, _y), Size = new Size(80, 30) };
+            var btnEdit = new Button { Text = "編輯", Location = new Point(110, _y), Size = new Size(80, 30) };
+            var btnDel = new Button { Text = "刪除", Location = new Point(200, _y), Size = new Size(80, 30) };
+            btnAdd.Click += (s, e) => AddRule();
+            btnEdit.Click += (s, e) => EditRule();
+            btnDel.Click += (s, e) => DeleteRule();
+            _body.Controls.Add(btnAdd);
+            _body.Controls.Add(btnEdit);
+            _body.Controls.Add(btnDel);
+            _y += 40;
+        }
+
+        private void RefreshRuleList()
+        {
+            if (_clbRules == null) return;
+            int sel = _clbRules.SelectedIndex;
+            _clbRules.Items.Clear();
+            if (_rules != null)
+                foreach (var r in _rules)
+                    _clbRules.Items.Add(RuleDisplay(r), r.Enabled);
+            if (sel >= 0 && sel < _clbRules.Items.Count)
+                _clbRules.SelectedIndex = sel;
+        }
+
+        private static string RuleDisplay(BarcodeRule r)
+        {
+            string name = string.IsNullOrEmpty(r.Name) ? "(未命名)" : r.Name;
+            return name + "  |  " + r.Pattern;
+        }
+
+        private void AddRule()
+        {
+            using (var f = new BarcodeRuleEditForm(null))
+            {
+                if (f.ShowDialog(this) == DialogResult.OK && f.Result != null)
+                {
+                    _rules.Add(f.Result);
+                    RefreshRuleList();
+                    _clbRules.SelectedIndex = _rules.Count - 1;
+                }
+            }
+        }
+
+        private void EditRule()
+        {
+            int i = _clbRules.SelectedIndex;
+            if (_rules == null || i < 0 || i >= _rules.Count) return;
+            using (var f = new BarcodeRuleEditForm(_rules[i]))
+            {
+                if (f.ShowDialog(this) == DialogResult.OK && f.Result != null)
+                {
+                    _rules[i] = f.Result;
+                    RefreshRuleList();
+                    _clbRules.SelectedIndex = i;
+                }
+            }
+        }
+
+        private void DeleteRule()
+        {
+            int i = _clbRules.SelectedIndex;
+            if (_rules == null || i < 0 || i >= _rules.Count) return;
+            _rules.RemoveAt(i);
+            RefreshRuleList();
+        }
+
         private ComboBox ComboRow(string label, string[] items)
         {
             var l = new Label { Text = label, AutoSize = true, Location = new Point(20, _y + 5) };
@@ -172,7 +263,11 @@ namespace DX01_ShortCircuitTester
             cbDebugLevel.SelectedItem = c.DebugLevel;
             if (cbDebugLevel.SelectedIndex < 0) cbDebugLevel.SelectedItem = "debug";
 
-            txtBarcodeRegex.Text = c.BarcodeRegex;
+            _rules = new System.Collections.Generic.List<BarcodeRule>();
+            if (c.BarcodeRules != null)
+                foreach (var r in c.BarcodeRules)
+                    if (r != null) _rules.Add(r.Clone());
+            RefreshRuleList();
 
             txtIRUpper.Text = Dbl(c.Step3CaseToChassisMax);
             txtOLValue.Text = Dbl(c.Step4PPlusInsulationMin);
@@ -254,7 +349,7 @@ namespace DX01_ShortCircuitTester
             var sb = new StringBuilder();
             sb.Append(txtLanIp.Text).Append('|').Append(txtLanPort.Text).Append('|')
               .Append(txtVendorIdHex.Text).Append('|').Append(txtProductIdHex.Text).Append('|')
-              .Append(cbDebugLevel.SelectedItem).Append('|').Append(txtBarcodeRegex.Text).Append('|')
+              .Append(cbDebugLevel.SelectedItem).Append('|').Append(RulesSnapshot()).Append('|')
               .Append(txtIRUpper.Text).Append('|').Append(txtOLValue.Text).Append('|')
               .Append(txtVoltUpper.Text).Append('|').Append(txtVoltLower.Text).Append('|')
               .Append(txtVoltOn.Text).Append('|').Append(txtVoltIsoUpper.Text).Append('|').Append(txtDcVoltageRange.Text).Append('|')
@@ -267,6 +362,16 @@ namespace DX01_ShortCircuitTester
               .Append(txtPollIntervalMs.Text).Append('|').Append(txtReadTimeoutMs.Text).Append('|')
               .Append(txtRelaySwitchDelayMs.Text).Append('|')
               .Append(txtNgRetryTimeoutMs.Text).Append('|').Append(txtNgRetryIntervalMs.Text);
+            return sb.ToString();
+        }
+
+        /// <summary>條碼規則的快照字串（供偵測未儲存修改）。</summary>
+        private string RulesSnapshot()
+        {
+            if (_rules == null) return "";
+            var sb = new StringBuilder();
+            foreach (var r in _rules)
+                sb.Append(r.Name).Append('~').Append(r.Pattern).Append('~').Append(r.Enabled).Append(';');
             return sb.ToString();
         }
 
@@ -333,7 +438,10 @@ namespace DX01_ShortCircuitTester
             c.VendorId = vid;
             c.ProductId = pid;
             c.DebugLevel = cbDebugLevel.SelectedItem != null ? cbDebugLevel.SelectedItem.ToString() : "debug";
-            c.BarcodeRegex = txtBarcodeRegex.Text.Trim();
+            c.BarcodeRules = new System.Collections.Generic.List<BarcodeRule>();
+            if (_rules != null)
+                foreach (var r in _rules)
+                    if (r != null) c.BarcodeRules.Add(r.Clone());
 
             c.Step3CaseToChassisMax = irUpper;
             c.Step4PPlusInsulationMin = olValue;

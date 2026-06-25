@@ -8,6 +8,23 @@ using DX01_ShortCircuitTester.Device;
 
 namespace DX01_ShortCircuitTester.Services
 {
+    /// <summary>單一條碼 / 序號驗證規則（V2.4：可新增 / 編輯 / 刪除 / 啟用停用，多組並存）。</summary>
+    public sealed class BarcodeRule
+    {
+        public string Name { get; set; }
+        public string Pattern { get; set; }
+        public bool Enabled { get; set; }
+
+        public BarcodeRule() { Name = ""; Pattern = ""; Enabled = true; }
+        public BarcodeRule(string name, string pattern, bool enabled)
+        {
+            Name = name ?? "";
+            Pattern = pattern ?? "";
+            Enabled = enabled;
+        }
+        public BarcodeRule Clone() { return new BarcodeRule(Name, Pattern, Enabled); }
+    }
+
     /// <summary>
     /// 全專案單一設定來源（記憶體 + Config\DX01Config.json）。
     /// SettingForm 編輯 / 儲存；MainForm、Real 設備、DX01TestFlow 皆讀取 <see cref="Current"/>。
@@ -25,8 +42,35 @@ namespace DX01_ShortCircuitTester.Services
         public string DebugLevel = "debug"; // error / info / debug
 
         // 2. 條碼 / 序號規則
-        //    格式：SN: + 12 碼數字（允許冒號後空白），例：SN:202606000327 / SN: 202606000327。
+        //    BarcodeRegex：舊版單一規則（保留供向後相容 / 遷移）。
+        //    BarcodeRules：V2.4 多組規則（新增 / 編輯 / 刪除 / 啟用停用），掃描時依序比對所有「啟用」規則。
         public string BarcodeRegex = "^SN:\\s*[0-9]{12}$";
+        public List<BarcodeRule> BarcodeRules = new List<BarcodeRule>
+        {
+            new BarcodeRule("SN", "^SN:\\s*[0-9]{12}$", true)
+        };
+
+        /// <summary>依序比對所有「啟用且有效」的條碼規則，回傳第一個符合者；皆不符回 null。</summary>
+        public BarcodeRule FindMatchingRule(string barcode)
+        {
+            if (BarcodeRules == null || barcode == null) return null;
+            foreach (var r in BarcodeRules)
+            {
+                if (r == null || !r.Enabled || string.IsNullOrEmpty(r.Pattern)) continue;
+                try { if (Regex.IsMatch(barcode, r.Pattern)) return r; }
+                catch { /* 規則語法錯誤 → 略過該規則 */ }
+            }
+            return null;
+        }
+
+        /// <summary>是否至少有一組「啟用且有效」的條碼規則。</summary>
+        public bool HasEnabledBarcodeRule()
+        {
+            if (BarcodeRules == null) return false;
+            foreach (var r in BarcodeRules)
+                if (r != null && r.Enabled && !string.IsNullOrEmpty(r.Pattern)) return true;
+            return false;
+        }
 
         // 3. 電阻條件
         public double Step3CaseToChassisMax = 10;          // IRUpper
@@ -95,6 +139,10 @@ namespace DX01_ShortCircuitTester.Services
             var c = (AppSettings)MemberwiseClone();
             if (StepWaitMs != null)
                 c.StepWaitMs = (int[])StepWaitMs.Clone();
+            c.BarcodeRules = new List<BarcodeRule>();
+            if (BarcodeRules != null)
+                foreach (var r in BarcodeRules)
+                    if (r != null) c.BarcodeRules.Add(r.Clone());
             return c;
         }
 
@@ -121,6 +169,30 @@ namespace DX01_ShortCircuitTester.Services
                     s.DebugLevel = Str(json, "debugLevel", s.DebugLevel);
 
                     s.BarcodeRegex = Str(json, "barcodeRegex", s.BarcodeRegex);
+
+                    // V2.4：多組條碼規則（indexed keys）。找到 barcodeRuleCount → 載入；
+                    // 否則以舊版單一 barcodeRegex 遷移成一條規則（向後相容）。
+                    int ruleCount = (int)Num(json, "barcodeRuleCount", -1);
+                    if (ruleCount >= 0)
+                    {
+                        s.BarcodeRules = new List<BarcodeRule>();
+                        for (int i = 0; i < ruleCount; i++)
+                        {
+                            string rpat = Str(json, "barcodeRule" + i + "_pattern", "");
+                            if (string.IsNullOrEmpty(rpat)) continue;
+                            string rname = Str(json, "barcodeRule" + i + "_name", "");
+                            bool ren = Str(json, "barcodeRule" + i + "_enabled", "true")
+                                        .Equals("true", StringComparison.OrdinalIgnoreCase);
+                            s.BarcodeRules.Add(new BarcodeRule(rname, rpat, ren));
+                        }
+                    }
+                    else
+                    {
+                        s.BarcodeRules = new List<BarcodeRule>
+                        {
+                            new BarcodeRule("SN", s.BarcodeRegex, true)
+                        };
+                    }
 
                     s.Step3CaseToChassisMax = Num(json, "step3_caseToChassis_max", s.Step3CaseToChassisMax);
                     s.Step4PPlusInsulationMin = Num(json, "step4_pPlusInsulation_min", s.Step4PPlusInsulationMin);
@@ -200,6 +272,16 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("productIdHex", JStr(ProductIdHex)));
             p.Add(Line("debugLevel", JStr(DebugLevel)));
             p.Add(Line("barcodeRegex", JStr(BarcodeRegex)));
+            // V2.4：多組條碼規則（indexed keys，方便沿用既有字串解析、且 regex 中的 {}[] 不影響解析）
+            int barcodeRuleN = BarcodeRules != null ? BarcodeRules.Count : 0;
+            p.Add(Line("barcodeRuleCount", barcodeRuleN.ToString(CultureInfo.InvariantCulture)));
+            for (int i = 0; i < barcodeRuleN; i++)
+            {
+                var r = BarcodeRules[i] ?? new BarcodeRule();
+                p.Add(Line("barcodeRule" + i + "_name", JStr(r.Name)));
+                p.Add(Line("barcodeRule" + i + "_pattern", JStr(r.Pattern)));
+                p.Add(Line("barcodeRule" + i + "_enabled", JStr(r.Enabled ? "true" : "false")));
+            }
             p.Add(Line("step3_caseToChassis_max", Dbl(Step3CaseToChassisMax)));
             p.Add(Line("step4_pPlusInsulation_min", Dbl(Step4PPlusInsulationMin)));
             p.Add(Line("step5_pMinusInsulation_min", Dbl(Step5PMinusInsulationMin)));

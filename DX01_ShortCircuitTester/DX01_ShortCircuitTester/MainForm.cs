@@ -1047,45 +1047,31 @@ namespace DX01_ShortCircuitTester
             if (raw.Length == 0)
                 return;
 
-            // (2)(5) 讀取目前 Settings 的 Barcode Regex 並記錄
-            string pattern = AppSettings.Current.BarcodeRegex;
-            if (_debugLog != null)
-            {
-                _debugLog.Write(LogKind.Info, "Barcode Regex = " + (string.IsNullOrEmpty(pattern) ? "(not configured)" : pattern));
-                _debugLog.Write(LogKind.Info, "Raw Barcode = " + raw);
-            }
+            // V2.4：依 Settings 的「多組條碼規則」驗證（依序比對所有啟用規則，符合任一即可）
+            var cfg = AppSettings.Current;
+            if (_debugLog != null) _debugLog.Write(LogKind.Info, "Raw Barcode = " + raw);
 
-            // (6) Settings 未設定 Regex → 不允許開始測試（紅字提示，不跳 Popup）
-            if (string.IsNullOrEmpty(pattern))
+            // 未設定任何啟用規則 → 不允許開始測試（紅字提示，不跳 Popup）
+            if (!cfg.HasEnabledBarcodeRule())
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode regex failed (rule not configured)");
-                SetBarcodeError(true, "Barcode validation rule not configured.");
-                FocusBarcodeInput();     // 保留欄位（清空會清掉紅字）、Focus + SelectAll
-                return;
-            }
-
-            bool match;
-            try { match = Regex.IsMatch(raw, pattern); }
-            catch (Exception ex)
-            {
-                // 規則語法本身錯誤 → 視為未正確設定，不開測（紅字提示）
-                if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode regex failed (invalid pattern: " + ex.Message + ")");
+                if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode rule failed (no enabled rule configured)");
                 SetBarcodeError(true, "Barcode validation rule not configured.");
                 FocusBarcodeInput();
                 return;
             }
 
-            // (2)(3) 驗證失敗 → 條碼欄下方紅字（不跳 Popup）+ Focus，不開測
-            if (!match)
+            // 依序比對啟用規則；全部不符合 → 紅字、不開測、Focus 回條碼欄
+            BarcodeRule matched = cfg.FindMatchingRule(raw);
+            if (matched == null)
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode regex failed");
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode regex failed (no rule matched)");
                 SetBarcodeError(true, "Barcode format error. Please scan again.");
                 FocusBarcodeInput();     // 保留欄位內容（清空會清掉紅字）、Focus + SelectAll 讓下一掃覆蓋
                 return;
             }
 
-            // (4) 驗證成功
-            if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode regex passed");
+            // 符合某一規則 → 開始測試
+            if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode matched rule : " + matched.Name);
             string sn = NormalizeBarcode(raw);
             if (_debugLog != null) _debugLog.Write(LogKind.Info, "Normalized SN = " + sn);
 
@@ -1878,6 +1864,11 @@ namespace DX01_ShortCircuitTester
             if (_meter != null) _meter.Disconnect();
 
             base.OnFormClosing(e);
+        }
+
+        private void panelTop_Paint(object sender, PaintEventArgs e)
+        {
+
         }
     }
 }

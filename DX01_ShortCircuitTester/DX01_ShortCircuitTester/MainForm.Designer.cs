@@ -141,6 +141,7 @@ namespace DX01_ShortCircuitTester
             this.panelTop.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.panelTop.Size = new System.Drawing.Size(954, 72);
             this.panelTop.TabIndex = 0;
+            this.panelTop.Paint += new System.Windows.Forms.PaintEventHandler(this.panelTop_Paint);
             // 
             // lblBarcodeCaption
             // 
