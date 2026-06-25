@@ -6,13 +6,14 @@ get_version:
   stage: prepare
   tags:
     - windows
+
   script:
-    - echo "===== CURRENT PATH ====="
-    - pwd
-    - echo "===== ROOT FILES ====="
-    - dir
-    - echo "===== FIND CSPROJ ====="
-    - dir /s *.csproj
+    - Write-Host "===== CURRENT PATH ====="
+    - Get-Location
+    - Write-Host "===== ROOT FILES ====="
+    - Get-ChildItem
+    - Write-Host "===== FIND CSPROJ ====="
+    - Get-ChildItem -Recurse -Filter *.csproj | Select-Object FullName
 
 build:
   stage: build
