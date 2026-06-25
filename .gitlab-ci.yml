@@ -40,5 +40,5 @@ build:
   artifacts:
     name: "DTX01_${DX01_VERSION}"
     paths:
-      - DX01_ShortCircuitTester/bin/Release/**
+      - DX01_ShortCircuitTester/**/bin/Release/net48/
     expire_in: 7 days
