@@ -6,14 +6,15 @@ get_version:
   stage: prepare
   tags:
     - windows
-
   script:
-    - Write-Host "===== CURRENT PATH ====="
-    - Get-Location
-    - Write-Host "===== ROOT FILES ====="
-    - Get-ChildItem
-    - Write-Host "===== FIND CSPROJ ====="
-    - Get-ChildItem -Recurse -Filter *.csproj | Select-Object FullName
+    - |
+      $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
+      $version = $xml.Project.PropertyGroup.Version
+      "DX01_VERSION=V$version" | Out-File version.env -Encoding ascii
+      Get-Content version.env
+  artifacts:
+    reports:
+      dotenv: version.env
 
 build:
   stage: build
@@ -23,9 +24,12 @@ build:
     - job: get_version
       artifacts: true
   script:
-    - echo DX01_VERSION=%DX01_VERSION%
-    - nuget restore DX01_ShortCircuitTester.sln
-    - msbuild DX01_ShortCircuitTester.sln /p:Configuration=Release
+    - Write-Host "DX01_VERSION=$env:DX01_VERSION"
+    - |
+      $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+      $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
+      Write-Host "MSBuild=$msbuild"
+      & $msbuild "DX01_ShortCircuitTester.sln" /restore /p:Configuration=Release
   artifacts:
     name: "DTX01_${DX01_VERSION}"
     paths:
