@@ -29,7 +29,7 @@ build:
       $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
       $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
       Write-Host "MSBuild=$msbuild"
-      & $msbuild "DX01_ShortCircuitTester.sln" /restore /p:Configuration=Release
+      & $msbuild ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.sln" /restore /p:Configuration=Release
   artifacts:
     name: "DTX01_${DX01_VERSION}"
     paths:
