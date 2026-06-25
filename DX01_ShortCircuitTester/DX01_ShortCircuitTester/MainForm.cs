@@ -48,6 +48,13 @@ namespace DX01_ShortCircuitTester
         private System.Windows.Forms.Timer _barcodeIdleTimer;   // V2.5：掃描槍未送 Enter → 300ms 閒置即視為掃描完成、自動開測
         private bool _suppressBarcodeTimer;                      // V2.5：程式自行改寫條碼欄位時抑制 300ms 自動開測（避免 Stop 後驗證舊條碼）
         private string _barcodeErrorMsg = "Barcode format error. Please scan again.";  // V2.5：條碼欄下方紅字訊息（可動態覆寫）
+        // V2.4：掃描槍 vs 手動輸入判斷 — 整串輸入 < BarcodeScannerMaxMs 且 >= BarcodeScannerMinKeys 鍵 → 視為掃描槍，Timer 才自動驗證。
+        private int _barcodeFirstKeyTick;     // 本串第一個字元的 KeyDown 時間 (Environment.TickCount)
+        private int _barcodeLastKeyTick;      // 本串最後一個字元的 KeyDown 時間
+        private int _barcodeKeyCount;         // 本串累計按鍵數
+        private const int BarcodeScannerMaxMs = 500;     // 整串輸入耗時上限 → 視為掃描槍
+        private const int BarcodeScannerMinKeys = 6;     // 至少鍵數（避免短手動輸入誤判為掃描）
+        private const int BarcodeNewBurstGapMs = 400;    // 與前一鍵間隔超過此值 → 視為新一串輸入（重置計時）
 
         // 已測試過的條碼 → 結果（OK / NG），供「重覆測試確認」使用（整個 session 保留）
         private readonly Dictionary<string, string> _testedBarcodes = new Dictionary<string, string>();
@@ -376,7 +383,7 @@ namespace DX01_ShortCircuitTester
         /// V2.5：將焦點移回「條碼/序號」欄。以 BeginInvoke 延遲到目前事件（按鈕點擊 / Popup 關閉）處理完成後執行，
         /// 確保按完 連線 / 中斷 或錯誤 Popup 關閉後，游標確實回到輸入框，OP 可直接下一次掃描。
         /// </summary>
-        private void FocusBarcodeInput()
+        private void FocusBarcodeInput(bool selectAll = true)
         {
             if (!IsHandleCreated) return;
             BeginInvoke(new Action(() =>
@@ -384,7 +391,7 @@ namespace DX01_ShortCircuitTester
                 if (txtBarcode != null && txtBarcode.CanFocus)
                 {
                     txtBarcode.Focus();
-                    txtBarcode.SelectAll();
+                    if (selectAll) txtBarcode.SelectAll();   // 手動輸入中不全選；掃描錯誤 / 測試完成才全選
                 }
             }));
         }
@@ -683,14 +690,14 @@ namespace DX01_ShortCircuitTester
                 _lanWasLost = false;
             }
 
-            FocusBarcodeInput();   // 連線成功 / 失敗 Popup 關閉後 → 游標回條碼欄
+            FocusBarcodeInput(false);   // 連線成功 / 失敗 Popup 關閉後 → 游標回條碼欄（不全選）
         }
 
         private void btnGdmDisconnect_Click(object sender, EventArgs e)
         {
             _meter.Disconnect();
             UpdateConnStatus();
-            FocusBarcodeInput();   // 中斷後 → 游標回條碼欄
+            FocusBarcodeInput(false);   // 中斷後 → 游標回條碼欄（不全選）
         }
 
         private void btnRelayConnect_Click(object sender, EventArgs e)
@@ -708,14 +715,14 @@ namespace DX01_ShortCircuitTester
             }
 
             UpdateConnStatus();
-            FocusBarcodeInput();   // 連線成功 / 失敗 Popup 關閉後 → 游標回條碼欄
+            FocusBarcodeInput(false);   // 連線成功 / 失敗 Popup 關閉後 → 游標回條碼欄（不全選）
         }
 
         private void btnRelayDisconnect_Click(object sender, EventArgs e)
         {
             _relay.Disconnect();
             UpdateConnStatus();
-            FocusBarcodeInput();   // 中斷後 → 游標回條碼欄
+            FocusBarcodeInput(false);   // 中斷後 → 游標回條碼欄（不全選）
         }
 
         /// <summary>Test 頁登入鈕（Settings 改 Admin 限定後的登入入口）。</summary>
@@ -998,6 +1005,17 @@ namespace DX01_ShortCircuitTester
         // 掃描槍掃描完成送出 Enter（CR）→ 立即送出條碼（保留 Enter 機制）。
         private void TxtBarcode_KeyDown(object sender, KeyEventArgs e)
         {
+            // 記錄每次 KeyDown 時間：用於判斷「掃描槍快速輸入」vs「手動輸入」。
+            // 與前一鍵間隔過大、或欄位為空 → 視為新一串輸入並重置計時。
+            int now = Environment.TickCount;
+            if (txtBarcode.Text.Length == 0 || (now - _barcodeLastKeyTick) > BarcodeNewBurstGapMs)
+            {
+                _barcodeFirstKeyTick = now;
+                _barcodeKeyCount = 0;
+            }
+            _barcodeLastKeyTick = now;
+            _barcodeKeyCount++;
+
             if (e.KeyCode != Keys.Enter)
                 return;
 
@@ -1022,11 +1040,27 @@ namespace DX01_ShortCircuitTester
             }
         }
 
-        // 300ms 無新字元 → 視為掃描完成 → 送出條碼（掃描槍未送 Enter 的後援）。
+        // 300ms 無新字元後：僅「疑似掃描槍快速輸入」才自動驗證；手動輸入不自動驗證、不顯示錯誤、不搶游標。
         private void BarcodeIdleTimer_Tick(object sender, EventArgs e)
         {
             _barcodeIdleTimer.Stop();   // 單次觸發
-            if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode scan completed (idle 300ms)");
+
+            int duration = _barcodeLastKeyTick - _barcodeFirstKeyTick;
+            bool scannerLike = _barcodeKeyCount >= BarcodeScannerMinKeys
+                               && duration >= 0 && duration < BarcodeScannerMaxMs;
+
+            if (!scannerLike)
+            {
+                // 手動輸入（或太短）→ 不驗證、不報錯、不全選；等使用者按 Enter 或繼續輸入。
+                if (_debugLog != null)
+                    _debugLog.Write(LogKind.Info,
+                        "Idle timer: manual input (keys=" + _barcodeKeyCount + ", " + duration + "ms) → skip auto-validate");
+                return;
+            }
+
+            if (_debugLog != null)
+                _debugLog.Write(LogKind.Info,
+                    "Barcode scan completed (scanner: keys=" + _barcodeKeyCount + ", " + duration + "ms)");
             SubmitScannedBarcode(txtBarcode.Text, "Timer");
         }
 
