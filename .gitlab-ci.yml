@@ -8,7 +8,7 @@ get_version:
     - windows
   script:
     - |
-      $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
+      $xml = [xml](Get-Content ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester\DX01_ShortCircuitTester.csproj")
       $version = $xml.Project.PropertyGroup.Version
       "DX01_VERSION=V$version" | Out-File version.env -Encoding ascii
       Get-Content version.env
@@ -24,17 +24,14 @@ build:
     - job: get_version
       artifacts: true
   script:
-    - echo DX01_VERSION=%DX01_VERSION%
-    - Write-Host "===== PWD ====="
-    - Get-Location
-    - Write-Host "===== CSPROJ ====="
-    - Get-ChildItem -Recurse *.csproj | Select-Object FullName
-    - nuget restore DX01_ShortCircuitTester.sln
-    - msbuild DX01_ShortCircuitTester.sln /p:Configuration=Release
-    - Write-Host "===== EXE ====="
-    - Get-ChildItem -Recurse *.exe | Select-Object FullName
+    - Write-Host "DX01_VERSION=$env:DX01_VERSION"
+    - |
+      $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+      $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe
+      Write-Host "MSBuild=$msbuild"
+      & $msbuild ".\DX01_ShortCircuitTester\DX01_ShortCircuitTester.sln" /restore /p:Configuration=Release
   artifacts:
     name: "DTX01_${DX01_VERSION}"
     paths:
-      - DX01_ShortCircuitTester/bin/Release/net48/
+      - DX01_ShortCircuitTester/bin/Release/**
     expire_in: 7 days
