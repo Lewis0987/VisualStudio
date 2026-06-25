@@ -46,8 +46,8 @@ namespace DX01_ShortCircuitTester
             this.lblInfo = new System.Windows.Forms.Label();
             this.lblConnGdm = new System.Windows.Forms.Label();
             this.lblConnRelay = new System.Windows.Forms.Label();
-            this.lblVersion = new System.Windows.Forms.Label();
             this.lblOperator = new System.Windows.Forms.Label();
+            this.lblVersion = new System.Windows.Forms.Label();
             this.tabDevice = new System.Windows.Forms.TabPage();
             this.gbRelay = new System.Windows.Forms.GroupBox();
             this.lblRelayInfo = new System.Windows.Forms.Label();
@@ -401,9 +401,9 @@ namespace DX01_ShortCircuitTester
             this.lblInfo.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblInfo.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
             this.lblInfo.ForeColor = System.Drawing.Color.DimGray;
-            this.lblInfo.Location = new System.Drawing.Point(0, 0);
+            this.lblInfo.Location = new System.Drawing.Point(293, 0);
             this.lblInfo.Name = "lblInfo";
-            this.lblInfo.Size = new System.Drawing.Size(736, 24);
+            this.lblInfo.Size = new System.Drawing.Size(443, 24);
             this.lblInfo.TabIndex = 0;
             this.lblInfo.Text = "就緒";
             this.lblInfo.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -434,9 +434,23 @@ namespace DX01_ShortCircuitTester
             this.lblConnRelay.TabIndex = 2;
             this.lblConnRelay.Text = "Relay: 未連線";
             this.lblConnRelay.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            //
+            // 
+            // lblOperator
+            // 
+            this.lblOperator.AutoSize = true;
+            this.lblOperator.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblOperator.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
+            this.lblOperator.ForeColor = System.Drawing.Color.Red;
+            this.lblOperator.Location = new System.Drawing.Point(131, 0);
+            this.lblOperator.Name = "lblOperator";
+            this.lblOperator.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
+            this.lblOperator.Size = new System.Drawing.Size(162, 20);
+            this.lblOperator.TabIndex = 4;
+            this.lblOperator.Text = "Operator：未登入";
+            this.lblOperator.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
             // lblVersion
-            //
+            // 
             this.lblVersion.AutoSize = true;
             this.lblVersion.Dock = System.Windows.Forms.DockStyle.Left;
             this.lblVersion.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
@@ -444,25 +458,11 @@ namespace DX01_ShortCircuitTester
             this.lblVersion.Location = new System.Drawing.Point(0, 0);
             this.lblVersion.Name = "lblVersion";
             this.lblVersion.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
-            this.lblVersion.Size = new System.Drawing.Size(110, 20);
+            this.lblVersion.Size = new System.Drawing.Size(131, 20);
             this.lblVersion.TabIndex = 3;
             this.lblVersion.Text = "Version : V2.4";
             this.lblVersion.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
-            // lblOperator
-            //
-            this.lblOperator.AutoSize = true;
-            this.lblOperator.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblOperator.Font = new System.Drawing.Font("Microsoft JhengHei UI", 9.5F);
-            this.lblOperator.ForeColor = System.Drawing.Color.Red;
-            this.lblOperator.Location = new System.Drawing.Point(110, 0);
-            this.lblOperator.Name = "lblOperator";
-            this.lblOperator.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
-            this.lblOperator.Size = new System.Drawing.Size(140, 20);
-            this.lblOperator.TabIndex = 4;
-            this.lblOperator.Text = "Operator：未登入";
-            this.lblOperator.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
+            // 
             // tabDevice
             // 
             this.tabDevice.Controls.Add(this.gbRelay);
@@ -732,7 +732,7 @@ namespace DX01_ShortCircuitTester
             this.MinimumSize = new System.Drawing.Size(840, 620);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "DTX01 外殼短路流程測試 V2.1";
+            this.Text = "DTX01 外殼短路流程測試 V2.4";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.tabMain.ResumeLayout(false);
             this.tabTest.ResumeLayout(false);
