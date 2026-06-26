@@ -41,6 +41,10 @@ namespace DX01_ShortCircuitTester.Services
         public int ProductId = 0x05DF;
         public string DebugLevel = "debug"; // error / info / debug
 
+        // V2.5：登入開關。true=維持登入流程（Test 頁免登入，切 Settings/Debug 才登入）；
+        //        false=啟動自動以 Admin 身分進入、全程免登入並保留完整 Admin 權限。
+        public bool EnableLogin = true;
+
         // 2. 條碼 / 序號規則
         //    BarcodeRegex：舊版單一規則（保留供向後相容 / 遷移）。
         //    BarcodeRules：V2.4 多組規則（新增 / 編輯 / 刪除 / 啟用停用），掃描時依序比對所有「啟用」規則。
@@ -167,6 +171,7 @@ namespace DX01_ShortCircuitTester.Services
                     s.VendorId = Hex(json, "vendorIdHex", s.VendorId);
                     s.ProductId = Hex(json, "productIdHex", s.ProductId);
                     s.DebugLevel = Str(json, "debugLevel", s.DebugLevel);
+                    s.EnableLogin = Str(json, "EnableLogin", "true").Equals("true", StringComparison.OrdinalIgnoreCase);
 
                     s.BarcodeRegex = Str(json, "barcodeRegex", s.BarcodeRegex);
 
@@ -271,6 +276,7 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("vendorIdHex", JStr(VendorIdHex)));
             p.Add(Line("productIdHex", JStr(ProductIdHex)));
             p.Add(Line("debugLevel", JStr(DebugLevel)));
+            p.Add(Line("EnableLogin", JStr(EnableLogin ? "true" : "false")));
             p.Add(Line("barcodeRegex", JStr(BarcodeRegex)));
             // V2.4：多組條碼規則（indexed keys，方便沿用既有字串解析、且 regex 中的 {}[] 不影響解析）
             int barcodeRuleN = BarcodeRules != null ? BarcodeRules.Count : 0;
