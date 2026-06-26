@@ -20,3 +20,10 @@ jobs:
 
       - name: Build Release
         run: msbuild DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln /p:Configuration=Release
+      
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DTX01-Build
+          path: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/
+      
