@@ -1,0 +1,22 @@
+name: Build DX01
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore NuGet
+        run: nuget restore DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln
+
+      - name: Build Release
+        run: msbuild DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln /p:Configuration=Release
