@@ -1,3 +1,11 @@
+# ================================================================================================
+# 只允許手動執行 Pipeline(自動包版把此段移除即可)
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"' 
+      when: always                       # 只有從 GitLab 網頁按 Run pipeline 才執行
+    - when: never                        # 其他觸發方式（Push、Merge、Schedule...）全部不執行
+# =================================================================================================
 stages:
   - prepare
   - build
@@ -33,5 +41,5 @@ build:
   artifacts:
     name: "DTX01_${DX01_VERSION}"
     paths:
-      - DX01_ShortCircuitTester/bin/Release/**
+      - DX01_ShortCircuitTester/**/bin/Release/net48/
     expire_in: 7 days
