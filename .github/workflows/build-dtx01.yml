@@ -41,7 +41,6 @@ jobs:
           
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'efs/heads/main_v2.4_fix'
         with:
           tag_name: ${{ env.VERSION }}
           name: DTX01_${{ env.VERSION }}
