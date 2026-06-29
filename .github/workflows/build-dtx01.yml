@@ -14,6 +14,15 @@ jobs:
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
+      # ↓↓↓ 新增這段(版號名稱) ↓↓↓ 
+      - name: Read Version
+        shell: pwsh
+        run: |
+          [xml]$xml = Get-Content "DX01_ShortCircuitTester/DX01_ShortCircuitTester.csproj"
+          $version = $xml.Project.PropertyGroup.Version
+          echo "VERSION=V$version" >> $env:GITHUB_ENV
+      - name: Show Version
+        run: echo ${{ env.VERSION }}
 
       - name: Restore NuGet
         run: nuget restore DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln
@@ -24,6 +33,6 @@ jobs:
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DTX01-Build
+          name: DTX01_${{ env.VERSION }}
           path: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/
       
