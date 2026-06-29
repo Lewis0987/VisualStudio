@@ -20,6 +20,7 @@ jobs:
       # ↓↓↓ 新增這段(版號名稱) ↓↓↓ 
       - name: Read Version
         shell: pwsh
+        # 2. csproj 路徑（更換產品時修改）↓↓↓ 
         run: |
           [xml]$xml = Get-Content "DX01_ShortCircuitTester/DX01_ShortCircuitTester/DX01_ShortCircuitTester.csproj"
           $version = $xml.Project.PropertyGroup.Version
@@ -30,6 +31,7 @@ jobs:
       - name: Restore NuGet
         run: nuget restore DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln
 
+       # 1. Solution 路徑（更換產品時修改）
       - name: Build Release
         run: msbuild DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln /p:Configuration=Release
 
@@ -37,13 +39,16 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive `
+            # 3. Release 輸出路徑（更換產品時修改）
             -Path "DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/*" `
-            -DestinationPath "DTX01_${{ env.VERSION }}.zip" `
+            # 4. ZIP 名稱（更換產品時修改）
+            -DestinationPath "DTX01_${{ env.VERSION }}.zip" ` #4. ZIP 名稱
             -Force
       
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
+          # 4. Artifact 名稱（更換產品時修改）
           name: DTX01_${{ env.VERSION }}
           path: DTX01_${{ env.VERSION }}.zip
           
@@ -51,6 +56,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
+          # 4. Release 名稱（更換產品時修改）
           name: DTX01_${{ env.VERSION }}
           files: DTX01_${{ env.VERSION }}.zip
         env:
