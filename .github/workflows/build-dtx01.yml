@@ -35,14 +35,14 @@ jobs:
       - name: Build Release
         run: msbuild DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln /p:Configuration=Release
 
+      # 3. Release 輸出路徑（更換產品時修改）
+      # 4. ZIP 名稱（更換產品時修改）
       - name: Create ZIP
         shell: pwsh
         run: |
           Compress-Archive `
-            # 3. Release 輸出路徑（更換產品時修改）
             -Path "DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/*" `
-            # 4. ZIP 名稱（更換產品時修改）
-            -DestinationPath "DTX01_${{ env.VERSION }}.zip" ` #4. ZIP 名稱
+            -DestinationPath "DTX01_${{ env.VERSION }}.zip" `
             -Force
       
       - name: Upload Build Artifact
