@@ -3,6 +3,9 @@ name: Build DX01
 on:
   push:
   workflow_dispatch:
+  
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -35,4 +38,13 @@ jobs:
         with:
           name: DTX01_${{ env.VERSION }}
           path: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/
-      
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'efs/heads/main_v2.4_fix'
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: DTX01_${{ env.VERSION }}
+          files: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
