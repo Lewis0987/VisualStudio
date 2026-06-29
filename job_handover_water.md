@@ -105,6 +105,14 @@
   - 關閉程式並以桌面的程式捷徑開啟目標檔案位置。
   - 沿用原報表存檔資料夾及config.ini，將打包完的檔案丟進完成更新。 
 
+# REO01 
+- GitLab Project
+  - http://192.168.1.37/lewis.chiu/reo01.git
+- 專案描述
+  - 原工站station4 大小板綁定、station5 PCBA焊後站合併為【station4 PCBA綁定測試站】
+
+
+
 # DTX01 PCBA工站
 - GitLab Project
   - http://192.168.1.37/water.lin/2nd-pcba-sn-burnin
@@ -199,6 +207,16 @@
   - 使用 AnyDesk 應用程式，打開程式後輸入 `/etic@13098982` 進入土城倉管的電腦。
   - 關閉程式並以桌面的程式捷徑開啟目標檔案位置。
   - 沿用原報表存檔資料夾，將打包完的檔案丟進完成更新。 
+
+# DTX01 外殼短路判斷 ShortCircuitTester
+- GitLab Project
+  - http://192.168.1.37/lewis.chiu/dtx01_casing_short_circuit.git
+- 本地端資料夾位置
+   - D:\VisualStudio\DX01_ShortCircuitTester
+- 專案描述
+  - 連線設備LAN IP:192.168.100.100
+  - CI/CD自動包版 main commitID: 698b1935
+  - G1 / G2 / P+ / P- 量測導通/電阻/電壓數值正確性，檢測流程Step1 ~ Step10
 
 # R12H UI
 - GitLab Project
