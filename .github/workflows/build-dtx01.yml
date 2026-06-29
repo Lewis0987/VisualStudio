@@ -32,18 +32,26 @@ jobs:
 
       - name: Build Release
         run: msbuild DX01_ShortCircuitTester/DX01_ShortCircuitTester.sln /p:Configuration=Release
+
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/*" `
+            -DestinationPath "DTX01_${{ env.VERSION }}.zip" `
+            -Force
       
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DTX01_${{ env.VERSION }}
-          path: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/
+          path: DTX01_${{ env.VERSION }}.zip
           
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: DTX01_${{ env.VERSION }}
-          files: DX01_ShortCircuitTester/DX01_ShortCircuitTester/bin/Release/**
+          files: DTX01_${{ env.VERSION }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
