@@ -8,9 +8,9 @@
 		<AssemblyName>DX01_Common</AssemblyName>
 		<LangVersion>7.3</LangVersion>
 		<!-- V2.4 版本資訊（與主程式同步） -->
-		<Version>2.4.0</Version>
-		<AssemblyVersion>2.4.0.0</AssemblyVersion>
-		<FileVersion>2.4.0.0</FileVersion>
+		<Version>2.5.0</Version>
+		<AssemblyVersion>2.5.0.0</AssemblyVersion>
+		<FileVersion>2.5.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- USB Relay (USBRelay2 HID) — RealRelayController 使用 -->

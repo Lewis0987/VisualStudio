@@ -164,6 +164,18 @@ namespace DX01_ShortCircuitTester.Services
             UsingDefaultPassword = false;
         }
 
+        /// <summary>
+        /// V2.5 免登入模式（AppSettings.EnableLogin=false）：不需密碼，直接以 Admin 身分進入，
+        /// 保留完整 Admin 權限。OperatorId 標記為 "AUTO" 以利追溯（CSV / Debug Log）。
+        /// </summary>
+        public void LoginAsAdminNoAuth()
+        {
+            OperatorId = "AUTO";
+            Role = OperatorRole.Admin;
+            IsLoggedIn = true;
+            UsingDefaultPassword = false;
+        }
+
         // ===== 帳號管理（Admin 用）=====
 
         /// <summary>預設 Admin 帳號，受保護不可刪除。</summary>

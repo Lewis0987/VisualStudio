@@ -7,6 +7,7 @@
   "vendorIdHex": "0x16C0",
   "productIdHex": "0x05DF",
   "debugLevel": "debug",
+  "EnableLogin": "true",
   "barcodeRegex": "^SN:\\s*[0-9]{12}$",
   "barcodeRuleCount": 3,
   "barcodeRule0_name": "SN",

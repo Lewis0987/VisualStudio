@@ -33,6 +33,9 @@ namespace DX01_ShortCircuitTester
         private TextBox txtPopupSeconds, txtStepFontSize, txtPollIntervalMs, txtReadTimeoutMs, txtRelaySwitchDelayMs;
         // 7b. V2.4 NG 重試（時間窗）
         private TextBox txtNgRetryTimeoutMs, txtNgRetryIntervalMs;
+        // 8. V2.5 登入開關
+        private CheckBox _chkEnableLogin;
+        private bool _originalEnableLogin;
 
         private Button btnSave, btnCancel;
 
@@ -125,6 +128,26 @@ namespace DX01_ShortCircuitTester
             Header("7b. NG 重試時間窗 (V2.4)");
             txtNgRetryTimeoutMs = TxtRow("NG Retry Timeout (ms)");
             txtNgRetryIntervalMs = TxtRow("NG Retry Interval (ms)");
+
+            Header("8. Login Authentication (Admin Only)");
+            _chkEnableLogin = CheckRow("Enable Login Authentication");
+            var loginHint = new Label
+            {
+                Text = "Unchecked = no login (auto Admin on startup). Changes take effect after restarting the application.",
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Location = new Point(20, _y)
+            };
+            _body.Controls.Add(loginHint);
+            _y += 28;
+        }
+
+        private CheckBox CheckRow(string label)
+        {
+            var c = new CheckBox { Text = label, AutoSize = true, Location = new Point(20, _y + 4) };
+            _body.Controls.Add(c);
+            _y += 32;
+            return c;
         }
 
         private void Header(string text)
@@ -297,6 +320,9 @@ namespace DX01_ShortCircuitTester
             txtRelaySwitchDelayMs.Text = c.RelaySwitchDelayMs.ToString(CultureInfo.InvariantCulture);
             txtNgRetryTimeoutMs.Text = c.NgRetryTimeoutMs.ToString(CultureInfo.InvariantCulture);
             txtNgRetryIntervalMs.Text = c.NgRetryIntervalMs.ToString(CultureInfo.InvariantCulture);
+
+            _chkEnableLogin.Checked = c.EnableLogin;
+            _originalEnableLogin = c.EnableLogin;
         }
 
         private static string Dbl(double v)
@@ -320,7 +346,10 @@ namespace DX01_ShortCircuitTester
                 return;
             }
 
-            MsgBox.Show(this, "參數設定", "設定已儲存", MessageBoxIcon.Information, "確定");
+            string savedMsg = "設定已儲存";
+            if (_chkEnableLogin != null && _chkEnableLogin.Checked != _originalEnableLogin)
+                savedMsg += "\n\nLogin authentication setting changed.\nPlease restart the application to take effect.";
+            MsgBox.Show(this, "參數設定", savedMsg, MessageBoxIcon.Information, "確定");
             _saved = true;
             DialogResult = DialogResult.OK;
             Close();
@@ -361,7 +390,8 @@ namespace DX01_ShortCircuitTester
             sb.Append(txtPopupSeconds.Text).Append('|').Append(txtStepFontSize.Text).Append('|')
               .Append(txtPollIntervalMs.Text).Append('|').Append(txtReadTimeoutMs.Text).Append('|')
               .Append(txtRelaySwitchDelayMs.Text).Append('|')
-              .Append(txtNgRetryTimeoutMs.Text).Append('|').Append(txtNgRetryIntervalMs.Text);
+              .Append(txtNgRetryTimeoutMs.Text).Append('|').Append(txtNgRetryIntervalMs.Text).Append('|')
+              .Append(_chkEnableLogin.Checked);
             return sb.ToString();
         }
 
@@ -438,6 +468,7 @@ namespace DX01_ShortCircuitTester
             c.VendorId = vid;
             c.ProductId = pid;
             c.DebugLevel = cbDebugLevel.SelectedItem != null ? cbDebugLevel.SelectedItem.ToString() : "debug";
+            c.EnableLogin = _chkEnableLogin.Checked;
             c.BarcodeRules = new System.Collections.Generic.List<BarcodeRule>();
             if (_rules != null)
                 foreach (var r in _rules)

@@ -461,7 +461,7 @@ namespace DX01_ShortCircuitTester
             this.lblVersion.Padding = new System.Windows.Forms.Padding(4, 0, 16, 0);
             this.lblVersion.Size = new System.Drawing.Size(131, 20);
             this.lblVersion.TabIndex = 3;
-            this.lblVersion.Text = "Version : V2.4";
+            this.lblVersion.Text = "Version : V2.5";
             this.lblVersion.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // tabDevice
@@ -733,7 +733,7 @@ namespace DX01_ShortCircuitTester
             this.MinimumSize = new System.Drawing.Size(840, 620);
             this.Name = "MainForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "DTX01 外殼短路流程測試 V2.4";
+            this.Text = "DTX01 外殼短路流程測試 V2.5";
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.tabMain.ResumeLayout(false);
             this.tabTest.ResumeLayout(false);

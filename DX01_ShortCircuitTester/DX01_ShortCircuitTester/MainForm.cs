@@ -75,7 +75,7 @@ namespace DX01_ShortCircuitTester
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
 
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
-        public const string Version = "V2.4";
+        public const string Version = "V2.5";
 
         // Test 頁底部連線狀態用色：已連線=綠、未連線=紅、連線中=橘
         private enum ConnState { Disconnected, Connecting, Connected }
@@ -122,6 +122,10 @@ namespace DX01_ShortCircuitTester
             // V2.2：載入員工帳號（首次執行自動建立預設 Admin 00000000）
             _auth = new OperatorAuth();
             _auth.Load();
+
+            // V2.5：免登入模式（EnableLogin=false）→ 啟動即以 Admin 身分進入，全程免登入、保留完整 Admin 權限。
+            if (!AppSettings.Current.EnableLogin)
+                _auth.LoginAsAdminNoAuth();
 
             // 鮑率選項
             cbGdmBaud.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
@@ -1679,17 +1683,18 @@ namespace DX01_ShortCircuitTester
                 btnOpenLogDir.Enabled = admin && !testing;
             }
 
-            // V2.4：登出按鈕：登入後（OP / Admin 皆）顯示於 TEST 頁 [登出][暫停][停止]；未登入隱藏；測試中停用。
             // V2.4：登入鈕（未登入顯示）/ 登出鈕（已登入顯示）；測試中皆停用。
+            // V2.5：免登入模式（EnableLogin=false）→ 登入 / 登出鈕一律隱藏（無需登入操作）。
+            bool loginEnabled = AppSettings.Current.EnableLogin;
             if (btnLogin != null)
             {
-                btnLogin.Visible = !loggedIn;
-                btnLogin.Enabled = !loggedIn && !testing;
+                btnLogin.Visible = loginEnabled && !loggedIn;
+                btnLogin.Enabled = loginEnabled && !loggedIn && !testing;
             }
             if (btnLogout != null)
             {
-                btnLogout.Visible = loggedIn;
-                btnLogout.Enabled = loggedIn && !testing;
+                btnLogout.Visible = loginEnabled && loggedIn;
+                btnLogout.Enabled = loginEnabled && loggedIn && !testing;
             }
 
             // 帳號管理：僅 Admin 顯示（未登入 / Operator 隱藏）；測試中停用
@@ -1704,9 +1709,10 @@ namespace DX01_ShortCircuitTester
             //   設備測試 / 電表測試、設備資訊（GDM Identify / Relay VID/PID）、參數設定、帳號管理。
             if (gbDevTest != null) gbDevTest.Visible = admin;       // 設備測試 / 電表測試
             if (gbDevInfo != null) gbDevInfo.Visible = admin;       // GDM Identify / Relay VID/PID
-            if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定
-            //   V2.4 分頁：連線已移至 Test 頁 → Settings（設備設定）與 Debug Log 皆僅 Admin 可見；OP 不進 Settings。
-            SetTabVisible(tabDevice, admin);  // 設備設定（Settings）：僅 Admin（IP/Port/LAN-Serial/Relay 資訊）
+            if (btnSettings != null) btnSettings.Visible = admin;   // 參數設定（開啟 SettingForm：參數/條碼規則/登入設定 → 僅 Admin）
+            //   V2.5：設備設定（Settings）分頁開放 OP（登入後）→ 僅可用「GDM 連線區 / Relay 連線區」；
+            //   其餘工程 / 管理控制項（設備測試、設備資訊、參數設定、帳號管理）仍僅 Admin 可見。Debug Log 仍僅 Admin。
+            SetTabVisible(tabDevice, true);   // 設備設定（Settings）：OP / Admin 皆可（OP 僅連線區）
             SetTabVisible(tabLog, admin);     // Debug Log：僅 Admin
 
             // V2.4：底部帳戶狀態（Version 右側 / 連線狀態左側）：未登入空白；Admin : 工號 / OP : 工號。

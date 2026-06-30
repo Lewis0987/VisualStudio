@@ -1,3 +1,12 @@
+# V2.5
+1. 新增「登入開關」功能（Settings → 啟用登入驗證 Enable Login）
+ - EnableLogin = true（預設）：維持現有登入流程（Test 頁免登入，切 Settings / Debug 才登入）
+ - EnableLogin = false：啟動自動以 Admin 身分進入，全程免登入並保留完整 Admin 權限
+ - 僅 Admin 可於 Settings 修改；變更後需重新啟動程式生效
+ - 設定永久保存於 DX01Config.json（EnableLogin）
+ - 不刪除 LoginForm / AccountManager / OperatorAuth；不再長期維護 feature/remove-login 分支
+2. OP權限_保留GDM/Relay連線功能
+
 # V2.4
 1. 新增 GitLab CI/CD 自動包版功能
  - Push 至 GitLab 後自動執行 Build
