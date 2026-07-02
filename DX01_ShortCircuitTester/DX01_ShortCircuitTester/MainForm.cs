@@ -1139,9 +1139,10 @@ namespace DX01_ShortCircuitTester
         /// </summary>
         private static string NormalizeBarcode(string raw)
         {
-            if (string.IsNullOrEmpty(raw)) return raw ?? "";
-            Match m = Regex.Match(raw, "[0-9]{12}");
-            return m.Success ? m.Value : raw.Trim();
+            //if (string.IsNullOrEmpty(raw)) return raw ?? "";
+            //Match m = Regex.Match(raw, "[0-9]{12}");
+            //return m.Success ? m.Value : raw.Trim();
+              return raw.Replace("PDEL2231,", "");
         }
 
         /// <summary>條碼欄位旁顯示訊息；autoHide=true 時 1 秒後自動清除。</summary>
