@@ -45,14 +45,20 @@ namespace DX01_ShortCircuitTester.Services
         //        false=啟動自動以 Admin 身分進入、全程免登入並保留完整 Admin 權限。
         public bool EnableLogin = true;
 
+        // V2.5：前站 Airflow PASS 檢查（開測前）。預設 false（需 Admin 於 Settings 啟用），
+        //        避免 API 未就緒即擋住所有測試。實際呼叫：{AirflowPreviousStationApiUrl}?sn[]={barcode}。
+        public bool EnableAirflowPreviousStationCheck = false;
+        public string AirflowPreviousStationApiUrl = "http://10.10.32.61:8800/api/airflow/count";
+        public int AirflowPreviousStationTimeoutMs = 5000;
+
         // 2. 條碼 / 序號規則
         //    BarcodeRegex：舊版單一規則（保留供向後相容 / 遷移）。
         //    BarcodeRules：V2.4 多組規則（新增 / 編輯 / 刪除 / 啟用停用），掃描時依序比對所有「啟用」規則。
         public string BarcodeRegex = "^SN:\\s*[0-9]{12}$";
         public List<BarcodeRule> BarcodeRules = new List<BarcodeRule>
         {
-            new BarcodeRule("SN", "^SN:\\s*[0-9]{12}$", true),
-            new BarcodeRule("PDEL2231", "^PDEL2231,PD2231[0-9A-Z][0-9]{4}$", true)
+            new BarcodeRule("DTX0101", "^SN:\\s*[0-9]{12}$", true),
+            new BarcodeRule("DXT0100", "^PDEL2231,PD2231[0-9A-Z][0-9]{4}$", true)
         };
 
         /// <summary>依序比對所有「啟用且有效」的條碼規則，回傳第一個符合者；皆不符回 null。</summary>
@@ -173,6 +179,9 @@ namespace DX01_ShortCircuitTester.Services
                     s.ProductId = Hex(json, "productIdHex", s.ProductId);
                     s.DebugLevel = Str(json, "debugLevel", s.DebugLevel);
                     s.EnableLogin = Str(json, "EnableLogin", "true").Equals("true", StringComparison.OrdinalIgnoreCase);
+                    s.EnableAirflowPreviousStationCheck = Str(json, "EnableAirflowPreviousStationCheck", "false").Equals("true", StringComparison.OrdinalIgnoreCase);
+                    s.AirflowPreviousStationApiUrl = Str(json, "AirflowPreviousStationApiUrl", s.AirflowPreviousStationApiUrl);
+                    s.AirflowPreviousStationTimeoutMs = (int)Num(json, "AirflowPreviousStationTimeoutMs", s.AirflowPreviousStationTimeoutMs);
 
                     s.BarcodeRegex = Str(json, "barcodeRegex", s.BarcodeRegex);
 
@@ -278,6 +287,9 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("productIdHex", JStr(ProductIdHex)));
             p.Add(Line("debugLevel", JStr(DebugLevel)));
             p.Add(Line("EnableLogin", JStr(EnableLogin ? "true" : "false")));
+            p.Add(Line("EnableAirflowPreviousStationCheck", JStr(EnableAirflowPreviousStationCheck ? "true" : "false")));
+            p.Add(Line("AirflowPreviousStationApiUrl", JStr(AirflowPreviousStationApiUrl)));
+            p.Add(Line("AirflowPreviousStationTimeoutMs", AirflowPreviousStationTimeoutMs.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("barcodeRegex", JStr(BarcodeRegex)));
             // V2.4：多組條碼規則（indexed keys，方便沿用既有字串解析、且 regex 中的 {}[] 不影響解析）
             int barcodeRuleN = BarcodeRules != null ? BarcodeRules.Count : 0;
