@@ -90,10 +90,10 @@ namespace DX01_ShortCircuitTester.Services
         public double DcVoltageRange = 100;         // GDM DC 電壓檔位 (CONF:VOLT:DC <range>)
 
         // 4b. V2.4 Power ON/OFF 自動偵測門檻（DC 電壓 / Relay 11；實際電池輸出電壓判定）
-        public double PowerOnThreshold = 40;        // 等待 Power ON：V >= 此值（請開機）
-        public double PowerOffThreshold = 5;        // 等待 Power OFF：V <= 此值（請關機）
+        public double PowerOnThreshold = 45;        // 等待 Power ON：V >= 此值（請開機）
+        public double PowerOffThreshold = 44;        // 等待 Power OFF：V <= 此值（請關機）
         public int PowerPollIntervalMs = 500;       // 等待 Power ON/OFF 期間每次量測間隔 (ms)
-        public int PowerWaitLogIntervalSec = 30;    // 等待狀態 Log 輸出間隔（秒）：偵測仍每 PowerPollIntervalMs，僅 Log 節流
+        public int PowerWaitLogIntervalSec = 10;    // 等待狀態 Log 輸出間隔（秒）：偵測仍每 PowerPollIntervalMs，僅 Log 節流
         public int PowerWaitTimeoutSec = 60;        // 等待 Power ON/OFF 逾時（秒）：超過仍未達門檻 → NG 停止；<=0 = 無限等待
 
         // 5. 電流條件（流程未使用，保留）
@@ -101,7 +101,7 @@ namespace DX01_ShortCircuitTester.Services
         public double CurrentMax = 0;
 
         // 6. Step 等待時間（index 1..10）；找不到=0
-        public int[] StepWaitMs = { 0, 0, 0, 0, 0, 0, 0, 10000, 0, 0, 0 };
+        public int[] StepWaitMs = { 0, 0, 0, 0, 3000, 3000, 0, 5000, 0, 0, 0 };
 
         // 7. UI / 執行參數
         public int PopupSeconds = 3;
