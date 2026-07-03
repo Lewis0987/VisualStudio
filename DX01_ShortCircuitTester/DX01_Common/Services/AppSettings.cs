@@ -51,7 +51,8 @@ namespace DX01_ShortCircuitTester.Services
         public string BarcodeRegex = "^SN:\\s*[0-9]{12}$";
         public List<BarcodeRule> BarcodeRules = new List<BarcodeRule>
         {
-            new BarcodeRule("SN", "^SN:\\s*[0-9]{12}$", true)
+            new BarcodeRule("SN", "^SN:\\s*[0-9]{12}$", true),
+            new BarcodeRule("PDEL2231", "^PDEL2231,PD2231[0-9A-Z][0-9]{4}$", true)
         };
 
         /// <summary>依序比對所有「啟用且有效」的條碼規則，回傳第一個符合者；皆不符回 null。</summary>
