@@ -45,13 +45,20 @@ namespace DX01_ShortCircuitTester.Services
         //        false=啟動自動以 Admin 身分進入、全程免登入並保留完整 Admin 權限。
         public bool EnableLogin = true;
 
+        // V2.5：前站 Airflow PASS 檢查（開測前）。預設 false（需 Admin 於 Settings 啟用），
+        //        避免 API 未就緒即擋住所有測試。實際呼叫：{AirflowPreviousStationApiUrl}?sn[]={barcode}。
+        public bool EnableAirflowPreviousStationCheck = true;
+        public string AirflowPreviousStationApiUrl = "http://10.10.32.61:8800/api/airflow/count";
+        public int AirflowPreviousStationTimeoutMs = 5000;
+
         // 2. 條碼 / 序號規則
         //    BarcodeRegex：舊版單一規則（保留供向後相容 / 遷移）。
         //    BarcodeRules：V2.4 多組規則（新增 / 編輯 / 刪除 / 啟用停用），掃描時依序比對所有「啟用」規則。
         public string BarcodeRegex = "^SN:\\s*[0-9]{12}$";
         public List<BarcodeRule> BarcodeRules = new List<BarcodeRule>
         {
-            new BarcodeRule("SN", "^SN:\\s*[0-9]{12}$", true)
+            new BarcodeRule("DTX0101", "^SN:\\s*[0-9]{12}$", true),
+            new BarcodeRule("DXT0100", "^PDEL2231,PD2231[0-9A-Z][0-9]{4}$", true)
         };
 
         /// <summary>依序比對所有「啟用且有效」的條碼規則，回傳第一個符合者；皆不符回 null。</summary>
@@ -90,10 +97,10 @@ namespace DX01_ShortCircuitTester.Services
         public double DcVoltageRange = 100;         // GDM DC 電壓檔位 (CONF:VOLT:DC <range>)
 
         // 4b. V2.4 Power ON/OFF 自動偵測門檻（DC 電壓 / Relay 11；實際電池輸出電壓判定）
-        public double PowerOnThreshold = 40;        // 等待 Power ON：V >= 此值（請開機）
-        public double PowerOffThreshold = 5;        // 等待 Power OFF：V <= 此值（請關機）
+        public double PowerOnThreshold = 45;        // 等待 Power ON：V >= 此值（請開機）
+        public double PowerOffThreshold = 44;        // 等待 Power OFF：V <= 此值（請關機）
         public int PowerPollIntervalMs = 500;       // 等待 Power ON/OFF 期間每次量測間隔 (ms)
-        public int PowerWaitLogIntervalSec = 30;    // 等待狀態 Log 輸出間隔（秒）：偵測仍每 PowerPollIntervalMs，僅 Log 節流
+        public int PowerWaitLogIntervalSec = 10;    // 等待狀態 Log 輸出間隔（秒）：偵測仍每 PowerPollIntervalMs，僅 Log 節流
         public int PowerWaitTimeoutSec = 60;        // 等待 Power ON/OFF 逾時（秒）：超過仍未達門檻 → NG 停止；<=0 = 無限等待
 
         // 5. 電流條件（流程未使用，保留）
@@ -101,7 +108,7 @@ namespace DX01_ShortCircuitTester.Services
         public double CurrentMax = 0;
 
         // 6. Step 等待時間（index 1..10）；找不到=0
-        public int[] StepWaitMs = { 0, 0, 0, 0, 0, 0, 0, 10000, 0, 0, 0 };
+        public int[] StepWaitMs = { 0, 0, 0, 0, 3000, 3000, 0, 5000, 0, 0, 0 };
 
         // 7. UI / 執行參數
         public int PopupSeconds = 3;
@@ -172,6 +179,9 @@ namespace DX01_ShortCircuitTester.Services
                     s.ProductId = Hex(json, "productIdHex", s.ProductId);
                     s.DebugLevel = Str(json, "debugLevel", s.DebugLevel);
                     s.EnableLogin = Str(json, "EnableLogin", "true").Equals("true", StringComparison.OrdinalIgnoreCase);
+                    s.EnableAirflowPreviousStationCheck = Str(json, "EnableAirflowPreviousStationCheck", "false").Equals("true", StringComparison.OrdinalIgnoreCase);
+                    s.AirflowPreviousStationApiUrl = Str(json, "AirflowPreviousStationApiUrl", s.AirflowPreviousStationApiUrl);
+                    s.AirflowPreviousStationTimeoutMs = (int)Num(json, "AirflowPreviousStationTimeoutMs", s.AirflowPreviousStationTimeoutMs);
 
                     s.BarcodeRegex = Str(json, "barcodeRegex", s.BarcodeRegex);
 
@@ -277,6 +287,9 @@ namespace DX01_ShortCircuitTester.Services
             p.Add(Line("productIdHex", JStr(ProductIdHex)));
             p.Add(Line("debugLevel", JStr(DebugLevel)));
             p.Add(Line("EnableLogin", JStr(EnableLogin ? "true" : "false")));
+            p.Add(Line("EnableAirflowPreviousStationCheck", JStr(EnableAirflowPreviousStationCheck ? "true" : "false")));
+            p.Add(Line("AirflowPreviousStationApiUrl", JStr(AirflowPreviousStationApiUrl)));
+            p.Add(Line("AirflowPreviousStationTimeoutMs", AirflowPreviousStationTimeoutMs.ToString(CultureInfo.InvariantCulture)));
             p.Add(Line("barcodeRegex", JStr(BarcodeRegex)));
             // V2.4：多組條碼規則（indexed keys，方便沿用既有字串解析、且 regex 中的 {}[] 不影響解析）
             int barcodeRuleN = BarcodeRules != null ? BarcodeRules.Count : 0;

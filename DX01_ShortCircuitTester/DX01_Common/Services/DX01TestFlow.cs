@@ -199,33 +199,33 @@ namespace DX01_ShortCircuitTester.Services
             //   ② 倒數結束仍未關機 → failOnTimeout=true 會新增一筆 Power OFF NG 列使 IsPass=false → 判定 NG、停止流程，
             //      並顯示「Power OFF timeout. / Final power off check failed.」（Timeout 後不可 PASS）。
             // FAIL / NG / 中止 / 設備異常 皆不進入（IsPass 為 false）→ 維持停止流程，等待人工處理。
-            if (result.IsPass)
-            {
-                bool offOk = false;
-                try
-                {
-                    offOk = await WaitForPowerAsync(false, 11, result, true, false, token);
-                }
-                catch (OperationCanceledException) { result.Aborted = true; }   // 操作員停止 → 中止（不 PASS）
-                catch (Exception ex)
-                {
-                    // 等待期間設備異常 → 視為最後關機確認失敗（NG / 設備異常）
-                    LogInfo("Final power off check error: " + ex.Message);
-                    result.HasAnomaly = true;
-                    result.AnomalyType = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
-                    result.AnomalyMessage = ex.Message;
-                    result.AnomalyStep = 11;
-                    result.AnomalyStepName = "Power OFF";
-                }
+            //if (result.IsPass)
+            //{
+            //    bool offOk = false;
+            //    try
+            //    {
+            //        offOk = await WaitForPowerAsync(false, 11, result, true, false, token);
+            //    }
+            //    catch (OperationCanceledException) { result.Aborted = true; }   // 操作員停止 → 中止（不 PASS）
+            //    catch (Exception ex)
+            //    {
+            //        // 等待期間設備異常 → 視為最後關機確認失敗（NG / 設備異常）
+            //        LogInfo("Final power off check error: " + ex.Message);
+            //        result.HasAnomaly = true;
+            //        result.AnomalyType = DeviceAnomaly.Classify(ex, AppSettings.Current.ConnectionMode == GdmConnectionMode.Lan);
+            //        result.AnomalyMessage = ex.Message;
+            //        result.AnomalyStep = 11;
+            //        result.AnomalyStepName = "Power OFF";
+            //    }
 
-                // 倒數逾時仍未關機（非停止、非設備異常）→ NG，記錄並標記供 UI 顯示專屬訊息。
-                if (!offOk && !result.Aborted && !result.HasAnomaly)
-                {
-                    result.FinalPowerOffTimeout = true;
-                    LogInfo("Power OFF timeout.");
-                    LogInfo("Final power off check failed.");
-                }
-            }
+            //    // 倒數逾時仍未關機（非停止、非設備異常）→ NG，記錄並標記供 UI 顯示專屬訊息。
+            //    if (!offOk && !result.Aborted && !result.HasAnomaly)
+            //    {
+            //        result.FinalPowerOffTimeout = true;
+            //        LogInfo("Power OFF timeout.");
+            //        LogInfo("Final power off check failed.");
+            //    }
+            //}
 
             return Finish(result);
         }

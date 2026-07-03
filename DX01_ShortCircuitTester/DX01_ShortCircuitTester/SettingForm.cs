@@ -36,6 +36,9 @@ namespace DX01_ShortCircuitTester
         // 8. V2.5 登入開關
         private CheckBox _chkEnableLogin;
         private bool _originalEnableLogin;
+        // 9. V2.5 前站 Airflow PASS 檢查
+        private CheckBox _chkEnableAirflow;
+        private TextBox _txtAirflowUrl;
 
         private Button btnSave, btnCancel;
 
@@ -139,6 +142,20 @@ namespace DX01_ShortCircuitTester
                 Location = new Point(20, _y)
             };
             _body.Controls.Add(loginHint);
+            _y += 28;
+
+            Header("9. Airflow Previous Station Check (Admin Only)");
+            _chkEnableAirflow = CheckRow("Enable Airflow Previous Station Check");
+            _txtAirflowUrl = TxtRow("Airflow Previous Station API URL");
+            _txtAirflowUrl.Width = 235;   // URL 較長，加寬輸入框
+            var airflowHint = new Label
+            {
+                Text = "Called as {URL}?sn[]={barcode} before test start. Only PASS (non-empty, count != 0) allows testing.",
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Location = new Point(20, _y)
+            };
+            _body.Controls.Add(airflowHint);
             _y += 28;
         }
 
@@ -323,6 +340,9 @@ namespace DX01_ShortCircuitTester
 
             _chkEnableLogin.Checked = c.EnableLogin;
             _originalEnableLogin = c.EnableLogin;
+
+            _chkEnableAirflow.Checked = c.EnableAirflowPreviousStationCheck;
+            _txtAirflowUrl.Text = c.AirflowPreviousStationApiUrl;
         }
 
         private static string Dbl(double v)
@@ -391,7 +411,8 @@ namespace DX01_ShortCircuitTester
               .Append(txtPollIntervalMs.Text).Append('|').Append(txtReadTimeoutMs.Text).Append('|')
               .Append(txtRelaySwitchDelayMs.Text).Append('|')
               .Append(txtNgRetryTimeoutMs.Text).Append('|').Append(txtNgRetryIntervalMs.Text).Append('|')
-              .Append(_chkEnableLogin.Checked);
+              .Append(_chkEnableLogin.Checked).Append('|')
+              .Append(_chkEnableAirflow.Checked).Append('|').Append(_txtAirflowUrl.Text);
             return sb.ToString();
         }
 
@@ -462,6 +483,9 @@ namespace DX01_ShortCircuitTester
 
             if (txtLanIp.Text.Trim().Length == 0) { err = "LanIP 不可空白。"; return false; }
 
+            if (_chkEnableAirflow.Checked && _txtAirflowUrl.Text.Trim().Length == 0)
+            { err = "Airflow Previous Station API URL 不可空白（已啟用前站檢查）。"; return false; }
+
             var c = AppSettings.Current;
             c.Ip = txtLanIp.Text.Trim();
             c.TcpPort = lanPort;
@@ -469,6 +493,8 @@ namespace DX01_ShortCircuitTester
             c.ProductId = pid;
             c.DebugLevel = cbDebugLevel.SelectedItem != null ? cbDebugLevel.SelectedItem.ToString() : "debug";
             c.EnableLogin = _chkEnableLogin.Checked;
+            c.EnableAirflowPreviousStationCheck = _chkEnableAirflow.Checked;
+            c.AirflowPreviousStationApiUrl = _txtAirflowUrl.Text.Trim();
             c.BarcodeRules = new System.Collections.Generic.List<BarcodeRule>();
             if (_rules != null)
                 foreach (var r in _rules)
