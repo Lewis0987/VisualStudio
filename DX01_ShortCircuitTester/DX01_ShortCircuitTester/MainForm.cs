@@ -73,6 +73,8 @@ namespace DX01_ShortCircuitTester
 
         private static readonly Color OkGreen = Color.FromArgb(46, 160, 67);
         private static readonly Color NgRed = Color.FromArgb(211, 47, 47);
+        private static readonly Color ErrorAmber = Color.FromArgb(230, 126, 34);   // V2.5：設備 / 前站異常「ERROR」大字幕（有別於 NG 紅、待測灰）
+        private bool _preCheckBusy;   // V2.5：開測前置檢查（含 Airflow API）進行中，避免重複觸發
 
         /// <summary>程式版本號（顯示於視窗標題與狀態列）。</summary>
         public const string Version = "V2.5";
@@ -1078,12 +1080,15 @@ namespace DX01_ShortCircuitTester
         /// </summary>
         private void SubmitScannedBarcode(string rawInput, string source)
         {
-            if (_running)               // 測試中：忽略重複觸發
+            if (_running || _preCheckBusy)   // 測試中 / 前置檢查中：忽略重複觸發
                 return;
 
             string raw = (rawInput ?? "").Trim();
             if (raw.Length == 0)
                 return;
+
+            // V2.5：新一輪掃描開始 → 大字幕先回到「待測」。條碼錯誤一律維持待測，不顯示 NG / ERROR。
+            SetResult("待測", Color.DimGray, Color.Gainsboro);
 
             // V2.4：依 Settings 的「多組條碼規則」驗證（依序比對所有啟用規則，符合任一即可）
             var cfg = AppSettings.Current;
@@ -1130,7 +1135,7 @@ namespace DX01_ShortCircuitTester
             SetBarcodeError(false);
             if (_debugLog != null)
                 _debugLog.Write(LogKind.Info, source == "Timer" ? "Auto StartTest by Timer" : "Calling StartTest");
-            StartTest(sn);
+            StartTest(sn);   // raw（含 SN: 前綴）供前站 Airflow API 使用
         }
 
         /// <summary>
@@ -1139,9 +1144,10 @@ namespace DX01_ShortCircuitTester
         /// </summary>
         private static string NormalizeBarcode(string raw)
         {
-            if (string.IsNullOrEmpty(raw)) return raw ?? "";
-            Match m = Regex.Match(raw, "[0-9]{12}");
-            return m.Success ? m.Value : raw.Trim();
+            //if (string.IsNullOrEmpty(raw)) return raw ?? "";
+            //Match m = Regex.Match(raw, "[0-9]{12}");
+            //return m.Success ? m.Value : raw.Trim();
+              return raw.Replace("PDEL2231,", "");
         }
 
         /// <summary>條碼欄位旁顯示訊息；autoHide=true 時 1 秒後自動清除。</summary>
@@ -1250,44 +1256,75 @@ namespace DX01_ShortCircuitTester
         {
             if (_debugLog != null) _debugLog.Write(LogKind.Info, "StartTest entered, sn = \"" + sn + "\"");
 
-            if (_running)
+            if (_running || _preCheckBusy)
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Info, "StartTest blocked reason = already running");
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "StartTest blocked reason = already running / pre-check busy");
                 return;
             }
+            _preCheckBusy = true;   // 進入前置檢查（含 Airflow API），避免重複觸發
 
-            // V2.4：TEST 頁不需登入 → 掃描條碼 / 開始測試不再跳權限驗證。
-            // 登入僅在切換到 Settings / Debug Log 等管理功能時觸發（TabMain_Selecting）。
+            // ===== Pre-check 階段：任何失敗都直接 return、只提示訊息；大字幕依類別維持「待測」或顯示「ERROR」，不顯示 NG =====
 
-            // 設備未連線屬「測試前檢查失敗」→ 統一顯示 NG（目前步驟→待測 / 大字→NG）；
-            // V2.4：連線已移至 Test 頁 → 不再切換到（OP 看不到的）Settings 分頁，提示後留在 Test 頁直接連線。
+            // C. GDM / Relay 設備錯誤 → 大字幕顯示 ERROR
             if (!_meter.IsConnected)
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Error, "StartTest blocked reason = 電表未連線");
-                ShowFailStatus();
-                MsgBox.Show(this, "電表未連線", "電表尚未連線，請先於 Test 頁按「連線」連線 GDM-8261A。", MessageBoxIcon.Warning, "確定");
-                FocusBarcodeInput();
+                if (_debugLog != null) _debugLog.Write(LogKind.Error, "Pre-check failed = 電表未連線");
+                DeviceErrorFail("電表未連線", "電表尚未連線，請先於 Test 頁按「連線」連線 GDM-8261A。");
                 return;
             }
 
             if (!_relay.IsConnected)
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Error, "StartTest blocked reason = Relay 未連線");
-                ShowFailStatus();
-                MsgBox.Show(this, "Relay 未連線", "USB Relay 尚未連線，請先於 Test 頁按「連線」連線 Relay。", MessageBoxIcon.Warning, "確定");
-                FocusBarcodeInput();
+                if (_debugLog != null) _debugLog.Write(LogKind.Error, "Pre-check failed = Relay 未連線");
+                DeviceErrorFail("Relay 未連線", "USB Relay 尚未連線，請先於 Test 頁按「連線」連線 Relay。");
                 return;
             }
 
+            // A. 條碼相關（空序號）→ 大字幕維持「待測」
             if (string.IsNullOrEmpty(sn))
             {
-                if (_debugLog != null) _debugLog.Write(LogKind.Info, "StartTest blocked reason = empty sn");
-                MsgBox.Show(this, "尚未輸入序號", "請先掃描或輸入條碼 / 序號。", MessageBoxIcon.Warning, "確定");
-                FocusBarcodeInput();
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Pre-check failed = empty sn");
+                PreCheckFail("尚未輸入序號", "請先掃描或輸入條碼 / 序號。");
                 return;
             }
 
-            if (_debugLog != null) _debugLog.Write(LogKind.Info, "StartTest checks passed, running test flow");
+            // B. 前站 Airflow PASS 檢查（Admin 於 Settings 啟用時）。
+            //    測試步驟表格加入「Checking previous station...」列：API 期間 Result = ---，
+            //    回傳後更新為 PASS（進入正式測試）或 NG（大字幕 ERROR、停止）。
+            var cfg = AppSettings.Current;
+            if (cfg.EnableAirflowPreviousStationCheck)
+            {
+                dgvResults.Rows.Clear();
+                int chkRow = AddCheckingRow();                          // 固定列「Checking previous station...」，Result = ---
+                SetCurrentStep("Checking previous station...", true);   // 目前步驟同步提示（大字幕維持待測）
+
+                AirflowCheckResult af;
+                try
+                {
+                    af = await Task.Run(() => AirflowCheck.Check(
+                        cfg.AirflowPreviousStationApiUrl, sn, cfg.AirflowPreviousStationTimeoutMs));
+                }
+                catch (Exception ex)
+                {
+                    af = new AirflowCheckResult { Url = cfg.AirflowPreviousStationApiUrl, FailReason = "API error: " + ex.Message };
+                }
+                LogAirflow(af, sn);
+
+                if (af != null && af.Pass)
+                {
+                    SetCheckingRowResult(chkRow, "PASS", true);   // 該列 Result → PASS，續進入正式測試
+                }
+                else
+                {
+                    SetCheckingRowResult(chkRow, "NG", false);    // 該列 Result → NG
+                    // 前站未 PASS → 大字幕 ERROR、停止；保留表格 NG 列（DeviceErrorFail 不清表格）
+                    DeviceErrorFail("Previous Station Airflow", "Previous station Airflow has not PASS. Please check.");
+                    return;
+                }
+            }
+
+            if (_debugLog != null) _debugLog.Write(LogKind.Info, "Pre-check passed, running test flow");
+            _preCheckBusy = false;   // 前置檢查全部通過 → 進入正式測試（之後由 _running 控管）
 
             _relayLostDuringTest = false;
 
@@ -1351,6 +1388,28 @@ namespace DX01_ShortCircuitTester
             row.DefaultCellStyle.Font = new Font(dgvResults.Font, FontStyle.Bold);
             row.DefaultCellStyle.BackColor = Color.FromArgb(232, 240, 254);
             row.DefaultCellStyle.ForeColor = Color.FromArgb(20, 40, 90);
+        }
+
+        /// <summary>V2.5：新增「Checking previous station...」列（Result 先顯示 ---），回傳列 index。字型 / 列高沿用表格預設，不跑版。</summary>
+        private int AddCheckingRow()
+        {
+            int idx = dgvResults.Rows.Add("前站", "Checking previous station...", "", "", "", "", "", "---");
+            var row = dgvResults.Rows[idx];
+            row.DefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
+            row.DefaultCellStyle.ForeColor = Color.DimGray;
+            dgvResults.FirstDisplayedScrollingRowIndex = idx;
+            return idx;
+        }
+
+        /// <summary>V2.5：更新「Checking previous station...」列的 Result 欄（PASS 綠 / NG 紅）。</summary>
+        private void SetCheckingRowResult(int rowIndex, string result, bool pass)
+        {
+            if (rowIndex < 0 || rowIndex >= dgvResults.Rows.Count) return;
+            var row = dgvResults.Rows[rowIndex];
+            row.Cells[colResult.Index].Value = result;
+            row.DefaultCellStyle.BackColor = pass ? Color.FromArgb(232, 245, 233) : Color.FromArgb(255, 235, 238);
+            row.DefaultCellStyle.ForeColor = pass ? Color.FromArgb(27, 94, 32) : Color.FromArgb(183, 28, 28);
+            dgvResults.Refresh();
         }
 
         private void OnTestFinished(TestResult result)
@@ -1494,6 +1553,48 @@ namespace DX01_ShortCircuitTester
         {
             ResetLiveStatus();                       // 目前步驟→待測、Relay→--、量測→---
             SetResult("NG", Color.White, NgRed);
+        }
+
+        /// <summary>
+        /// V2.5：開測「前置檢查」失敗且屬「條碼」類（非設備、非前站）。
+        /// 大字幕維持「待測」（不顯示 NG / ERROR），僅跳提示訊息並讓游標回條碼欄。
+        /// </summary>
+        private void PreCheckFail(string title, string message)
+        {
+            _preCheckBusy = false;
+            ResetLiveStatus();                                    // 目前步驟→待測、Relay→--、量測→---
+            SetResult("待測", Color.DimGray, Color.Gainsboro);    // 大字幕維持待測，不顯示 NG / ERROR
+            MsgBox.Show(this, title, message, MessageBoxIcon.Warning, "確定");
+            FocusBarcodeInput();
+        }
+
+        /// <summary>
+        /// V2.5：開測前 / 開測時的「GDM / Relay 設備錯誤」或「前站 Airflow 未 PASS」。
+        /// 大字幕顯示「ERROR」（異常，非待測、非 NG）；不清空測試表格，並跳提示訊息、游標回條碼欄。
+        /// </summary>
+        private void DeviceErrorFail(string title, string message)
+        {
+            _preCheckBusy = false;
+            ResetLiveStatus();
+            SetResult("ERROR", Color.White, ErrorAmber);          // 異常 → ERROR（非待測、非 NG）
+            MsgBox.Show(this, title, message, MessageBoxIcon.Warning, "確定");
+            FocusBarcodeInput();
+        }
+
+        /// <summary>將前站 Airflow 檢查結果寫入 Debug Log（SN / URL / HTTP / 原始回傳 / 解析值 / 結果 / 失敗原因）。</summary>
+        private void LogAirflow(AirflowCheckResult r, string sn)
+        {
+            if (_debugLog == null || r == null) return;
+            _debugLog.Write(LogKind.Info, "Airflow check SN = " + sn);
+            _debugLog.Write(LogKind.Info, "Airflow API URL = " + (r.Url ?? ""));
+            _debugLog.Write(LogKind.Info, "Airflow HTTP Status = " + r.HttpStatus);
+            _debugLog.Write(LogKind.Info, "Airflow Response = " + (r.RawResponse ?? ""));
+            _debugLog.Write(LogKind.Info, "Airflow Parsed = " + (string.IsNullOrEmpty(r.ParsedValue) ? "(none)" : r.ParsedValue));
+            if (r.Pass)
+                _debugLog.Write(LogKind.Info, "Airflow Result = PASS");
+            else
+                _debugLog.Write(LogKind.Error, "Airflow Result = FAIL" +
+                    (string.IsNullOrEmpty(r.FailReason) ? "" : " (" + r.FailReason + ")"));
         }
 
         /// <summary>Step12 Return Step1：恢復目前步驟=待測、Relay=--、量測值=---（保留結果與表格）。</summary>
