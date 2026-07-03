@@ -47,7 +47,7 @@ namespace DX01_ShortCircuitTester.Services
 
         // V2.5：前站 Airflow PASS 檢查（開測前）。預設 false（需 Admin 於 Settings 啟用），
         //        避免 API 未就緒即擋住所有測試。實際呼叫：{AirflowPreviousStationApiUrl}?sn[]={barcode}。
-        public bool EnableAirflowPreviousStationCheck = false;
+        public bool EnableAirflowPreviousStationCheck = true;
         public string AirflowPreviousStationApiUrl = "http://10.10.32.61:8800/api/airflow/count";
         public int AirflowPreviousStationTimeoutMs = 5000;
 
