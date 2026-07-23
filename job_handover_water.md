@@ -99,13 +99,13 @@
     station1 電芯分選,10.10.32.185\station1_cell,anydesk: 451843650
     station2 M/C綁定,10.10.32.182\Station2_MC,anydesk: 1591055610/1903137812
     station3 鋁排焊後,10.10.32.188\Station3_ModuleCellVR,anydesk: 1713245473
-    station4 大小板綁定,10.10.32.190\Station4_mPCBAboard,anydesk: 405848539
-    station5 PCBA焊後,10.10.32.191\Station5_PcbaCellir,anydesk: 1418261801
-    station6 Pack組裝,10.10.32.195\Station6_PM,anydesk: 1211169734/1140707281
+    station4 大小板綁定,10.10.32.190\Station4_mPCBAboard,anydesk: 405848539  # 合併多一個S5共享資料夾
+    <!-- 原station5 (S4合併) PCBA焊後,10.10.32.190\Station5_PcbaCellir,anydesk: 1418261801   -->
+    station5 Pack組裝,10.10.32.195\Station5_PM,anydesk: 1211169734/1140707281
   - 關閉程式並以桌面的程式捷徑開啟目標檔案位置。
   - 沿用原報表存檔資料夾及config.ini，將打包完的檔案丟進完成更新。 
 
-# REO01 
+## REO01 
 - GitLab Project
   - http://192.168.1.37/lewis.chiu/reo01.git
 - 專案描述
