@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- CSV Demo 產生工具（開發輔助，非出貨程式）。 -->
+	<!-- 直接參考 DX01_Common 原始碼專案，故 CsvLogger.cs 一經修改，dotnet run 會自動重新編譯並反映最新格式。 -->
+	<!-- 刻意不加入 DX01_ShortCircuitTester.sln：正式方案的建置內容完全不受影響。 -->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>7.3</LangVersion>
+		<RootNamespace>DX01_CsvDemoGenerator</RootNamespace>
+		<AssemblyName>CsvDemoGenerator</AssemblyName>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\DX01_Common\DX01_Common.csproj" />
+	</ItemGroup>
+
+</Project>
