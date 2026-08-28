@@ -129,19 +129,21 @@ namespace DX01_ShortCircuitTester.Services
         }
 
         /// <summary>
-        /// 絕緣量測欄位（G1P+R / G2P-R）：不再輸出「OL Ω」，改為狀態文字。
-        ///   超出量測範圍 (原 OL) → "&gt;1000K"
-        ///   絕緣測試通過          → "OK"
-        ///   其餘（NG，有實際數值）→ 不含單位的原始量測值（供追溯）
+        /// 絕緣量測欄位（G1P+R / G2P-R）：不輸出「OL Ω」，改為狀態文字。
+        ///   絕緣測試通過 → "OK"
+        ///     （不論 GDM 回傳 OL / Over Range 或實際數值 &gt; OLValue，一律 OK；
+        ///       UI 仍照舊顯示 OL Ω，本轉換只作用於 CSV。）
+        ///   NG 且超出量測範圍 → "&gt;1000K"
+        ///   NG 且有實際數值   → 不含單位的原始量測值（供追溯）
         /// 未量測 → 空字串。判定仍由測試流程決定，此處僅轉換顯示文字。
         /// </summary>
         private static string InsulationCell(TestResult result, int stepNumber)
         {
             var s = FindStep(result, stepNumber);
             if (s == null) return "";
-            if (IsOverRange(s.Value, s.Unit)) return OverRangeText;
-            if (s.Pass) return "OK";
-            return FormatNoUnit(s.Value, s.Unit);
+            if (s.Pass) return "OK";                                    // PASS 一律 OK（含 OL）
+            if (IsOverRange(s.Value, s.Unit)) return OverRangeText;     // NG 且超出量測範圍
+            return FormatNoUnit(s.Value, s.Unit);                       // NG 且有實際數值
         }
 
         /// <summary>

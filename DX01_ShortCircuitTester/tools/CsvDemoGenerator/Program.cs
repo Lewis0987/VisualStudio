@@ -52,10 +52,15 @@ namespace DX01_CsvDemoGenerator
                 // 唯一需要的設定：把輸出導向 Demo\Logs（正式程式的預設行為完全不變）。
                 CsvLogger.LogDirectory = outDir;
 
-                TestResult demo = BuildDemoResult();
+                // Case 1：GDM 回傳 OL（超出量測範圍）且 PASS   → G1P+R / G2P-R 應顯示 OK
+                // Case 2：絕緣為實際數值（> OLValue）且 PASS      → G1P+R / G2P-R 應顯示 OK
+                TestResult case1 = BuildDemoResult("PD223108491", 1.801, OverloadReading, OverloadReading,
+                                                   49.2609, 0.2035, 0.3056);
+                TestResult case2 = BuildDemoResult("DX0100000000", 2.240, 5361277.308716, 5194804.480623,
+                                                   49.8951, 0.3268, 0.3920);
 
                 string file = Path.Combine(outDir,
-                    "DX01_" + demo.StartTime.ToString("yyyyMMdd") + ".csv");
+                    "DX01_" + case1.StartTime.ToString("yyyyMMdd") + ".csv");
 
                 if (reset && File.Exists(file))
                 {
@@ -64,11 +69,13 @@ namespace DX01_CsvDemoGenerator
                 }
 
                 // ★ 直接呼叫正式 CsvLogger，不自行組 CSV。
-                string written = CsvLogger.Append(demo);
+                CsvLogger.Append(case1);
+                string written = CsvLogger.Append(case2);
 
                 Console.WriteLine("=== CSV Demo 產生完成 ===");
                 Console.WriteLine(@"  來源格式  : DX01_Common\Services\CsvLogger.cs (CsvLogger.Append)");
-                Console.WriteLine("  整體判定  : " + demo.Judgement + "  (IsPass=" + demo.IsPass + ")");
+                Console.WriteLine("  Case 1    : 絕緣 = OL (Over Range)，" + case1.Judgement);
+                Console.WriteLine("  Case 2    : 絕緣 = 實際數值 > OLValue，" + case2.Judgement);
                 Console.WriteLine("  輸出資料夾: " + outDir);
                 Console.WriteLine("  Demo CSV  : " + written);
                 Console.WriteLine();
@@ -92,13 +99,15 @@ namespace DX01_CsvDemoGenerator
         ///   Step3 = G1G2R、Step4 = G1P+R、Step5 = G2P-R、
         ///   Step8 = P+P-V、Step9 = G1P+V、Step10 = G2P-V。
         /// </summary>
-        private static TestResult BuildDemoResult()
+        private static TestResult BuildDemoResult(string label, double g1g2r,
+                                                  double g1pPlusR, double g2pMinusR,
+                                                  double ppV, double g1pPlusV, double g2pMinusV)
         {
             DateTime now = DateTime.Now;
 
             var r = new TestResult
             {
-                SerialNumber = "DX0100000000",
+                SerialNumber = label,
                 OperatorId = "DEMO",
                 StartTime = now,
                 EndTime = now,
@@ -106,13 +115,13 @@ namespace DX01_CsvDemoGenerator
                 Aborted = false
             };
 
-            r.Steps.Add(Measure(3, "外殼對機殼導通", "00", "電阻", "Ω", 2.240, null, 10));
-            // 絕緣量測回傳 OL（超出量測範圍）→ CsvLogger 轉為 ">1000K"
-            r.Steps.Add(Measure(4, "P+ 對外殼絕緣", "01", "電阻", "Ω", OverloadReading, OlValue, null));
-            r.Steps.Add(Measure(5, "P- 對外殼絕緣", "10", "電阻", "Ω", OverloadReading, OlValue, null));
-            r.Steps.Add(Measure(8, "P+ / P- 電壓", "11", "DC電壓", "V", 49.8951, 48, 51));
-            r.Steps.Add(Measure(9, "P+ 對外殼電壓", "01", "DC電壓", "V", 0.3268, null, 1));
-            r.Steps.Add(Measure(10, "P- 對外殼電壓", "10", "DC電壓", "V", 0.3920, null, 1));
+            r.Steps.Add(Measure(3, "外殼對機殼導通", "00", "電阻", "Ω", g1g2r, null, 10));
+            // 絕緣：OL 或實際數值皆可，只要 Pass == true，CsvLogger 一律輸出 OK
+            r.Steps.Add(Measure(4, "P+ 對外殼絕緣", "01", "電阻", "Ω", g1pPlusR, OlValue, null));
+            r.Steps.Add(Measure(5, "P- 對外殼絕緣", "10", "電阻", "Ω", g2pMinusR, OlValue, null));
+            r.Steps.Add(Measure(8, "P+ / P- 電壓", "11", "DC電壓", "V", ppV, 48, 51));
+            r.Steps.Add(Measure(9, "P+ 對外殼電壓", "01", "DC電壓", "V", g1pPlusV, null, 1));
+            r.Steps.Add(Measure(10, "P- 對外殼電壓", "10", "DC電壓", "V", g2pMinusV, null, 1));
 
             return r;
         }
