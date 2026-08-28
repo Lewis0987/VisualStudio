@@ -6,6 +6,7 @@
  - 設定永久保存於 DX01Config.json（EnableLogin）
  - 不刪除 LoginForm / AccountManager / OperatorAuth；不再長期維護 feature/remove-login 分支
 2. OP權限_保留GDM/Relay連線功能
+3. 新增產生Demo CSV 【 powershell -ExecutionPolicy Bypass -File .\tools\GenerateCsvDemo.ps1】 --Reset 尾綴資料清除產當日 Demo 
 
 # V2.4
 1. 新增 GitLab CI/CD 自動包版功能
