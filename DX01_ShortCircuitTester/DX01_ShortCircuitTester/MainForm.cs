@@ -279,6 +279,8 @@ namespace DX01_ShortCircuitTester
             panelTop.RowStyles.Clear();
 
             // 先設定輸入框，取得實際高度（內層恰好等於文字高，避免底色外露 / 邊框不完整）
+            // V2.5：條碼欄一律顯示大寫（掃描器 / 手動輸入 / 貼上皆即時轉換，與 Caps Lock 狀態無關）。
+            txtBarcode.CharacterCasing = CharacterCasing.Upper;
             txtBarcode.BorderStyle = BorderStyle.None;
             txtBarcode.BackColor = Color.White;
             txtBarcode.Dock = DockStyle.Fill;
@@ -1083,7 +1085,8 @@ namespace DX01_ShortCircuitTester
             if (_running || _preCheckBusy)   // 測試中 / 前置檢查中：忽略重複觸發
                 return;
 
-            string raw = (rawInput ?? "").Trim();
+            // V2.5：正式驗證內容一律大寫（不依賴 UI CharacterCasing，亦不受 Caps Lock 影響）。
+            string raw = (rawInput ?? "").Trim().ToUpperInvariant();
             if (raw.Length == 0)
                 return;
 
@@ -1099,6 +1102,16 @@ namespace DX01_ShortCircuitTester
             {
                 if (_debugLog != null) _debugLog.Write(LogKind.Error, "Barcode rule failed (no enabled rule configured)");
                 SetBarcodeError(true, "Barcode validation rule not configured.");
+                FocusBarcodeInput();
+                return;
+            }
+
+            // V2.5：Trim 後內容中間不得含任何 whitespace（半形空格 / Tab / CR / LF / 全形空白…）。
+            // 需求為「中間有空白 → 格式錯誤」，故不做刪除後放行，直接判定失敗。
+            if (HasInnerWhitespace(raw))
+            {
+                if (_debugLog != null) _debugLog.Write(LogKind.Info, "Barcode rejected (whitespace inside barcode)");
+                SetBarcodeError(true, "Barcode format error. Please scan again.");
                 FocusBarcodeInput();
                 return;
             }
@@ -1136,6 +1149,18 @@ namespace DX01_ShortCircuitTester
             if (_debugLog != null)
                 _debugLog.Write(LogKind.Info, source == "Timer" ? "Auto StartTest by Timer" : "Calling StartTest");
             StartTest(sn);   // raw（含 SN: 前綴）供前站 Airflow API 使用
+        }
+
+        /// <summary>
+        /// 已 Trim 的條碼內容中是否含有 whitespace（即「中間空白」）。
+        /// 涵蓋半形空格 / Tab / CR / LF / 全形空白等所有 <see cref="char.IsWhiteSpace(char)"/> 判定字元。
+        /// </summary>
+        private static bool HasInnerWhitespace(string trimmed)
+        {
+            if (string.IsNullOrEmpty(trimmed)) return false;
+            foreach (char c in trimmed)
+                if (char.IsWhiteSpace(c)) return true;
+            return false;
         }
 
         /// <summary>

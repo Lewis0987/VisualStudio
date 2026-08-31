@@ -21,7 +21,7 @@
   "barcodeRule1_enabled": "true",
   "barcodeRule2_name": "test",
   "barcodeRule2_pattern": "00",
-  "barcodeRule2_enabled": "true",
+  "barcodeRule2_enabled": "false",
   "step3_caseToChassis_max": 10,
   "step4_pPlusInsulation_min": 1000000,
   "step5_pMinusInsulation_min": 1000000,
